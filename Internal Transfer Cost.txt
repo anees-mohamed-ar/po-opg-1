@@ -1,0 +1,3792 @@
+;;; Sri Ganeshji : Sri Balaji : Sri Pitreshwarji : Sri Durgaji : Sri Venkateshwara
+;;; Om Nama shivaya
+;;; Developed for OPG Purchase Developement;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Developed by iMatrix Technologies Pvt ltd;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Development Executive Mr. Guna;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Contact Person Mobile No. +91 98416 09965;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Project Started on 24.3.2023;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+[System: Formula]
+	
+	OpgcoalTransOrder : $VoucherTypeName = "Coal Transfer Posting" and $Ultrauser Contains "No"
+	OpgcoalTransCompltOrder : $VoucherTypeName = "Coal Transfer Posting" and $Ultrauser Contains "Yes"
+
+
+[System: UDF]
+	
+	TransOcFre		: String: 2086
+	TransOcFreSub	: String: 2087
+	TransOcFreInr	: Amount: 2088
+
+	TransDDwgt		: String: 2089
+	TransDDwgtSub	: String: 2090
+	TransDDwgtInr	: Amount: 2091
+
+	TransDem		: String: 2092
+	TransDemSub		: String: 2093
+	TransDemInr		: Amount: 2094
+
+	TransInsur		: String: 2095
+	TransInsurSub	: String: 2096
+	TransInsurInr	: Amount: 2097
+
+	TransSample		: String: 20981	
+	TransSampleSub	: String: 2099
+	TransSampleInr	: Amount: 2100
+
+	TransSTock		: String: 2101
+	TransSTockSub	: String: 2102
+	TransSTockInr	: Amount: 2103
+
+	TransDraft		: String: 2104
+	TransDraftSub	: String: 2105
+	TransDraftInr	: Amount: 2106
+
+	TransLia		: String: 2107
+	TransLiaSub		: String: 2108
+	TransLiaInr		: Amount: 2109
+
+	TransWhar		: String: 2110
+	TransWharSub	: String: 2111
+	TransWharInr	: Amount: 2112	
+	
+	TransEquip		: String: 2113
+	TransEquipSub	: String: 2114
+	TransEquipInr	: Amount: 2115	
+
+	TransDisc		: String: 2116
+	TransDiscSub	: String: 2117
+	TransDiscInr	: Amount: 2118
+
+	TransStev		: String: 2119
+	TransStevSub	: String: 2120
+	TransStevInr	: Amount: 2121
+
+	TransWharEn		: String: 2122
+	TransWharEnSub	: String: 2123
+	TransWharEnInr	: Amount: 2124
+
+	TransTrans		: String: 21251
+	TransTransSub	: String: 2126	
+	TransTransInr	: Amount: 2127
+
+	TransHandling	: String: 2128
+	TransHandlingSub: String: 2129	
+	TransHandlingInr: Amount: 2130	
+
+	TransVesIn		: String: 2131
+	TransVesInSub	: String: 2132
+	TransVesInsyn	: String: 2133
+	TransVesInDol	: Amount: 2134
+	TransVesInExch	: Amount: 2135
+	TransVesInInr	: Amount: 2136
+	
+	CoalSkuValue		: Amount: 2137	
+	TCoalcostunit		: Amount: 2138		
+	Coalcostunit		: Amount: 2139	
+	TCoalTranscostunit	: Amount: 2140
+	CoalTranscostunit	: Amount: 2141
+		
+	TCoalRAilcostunit	: Amount: 2142
+	CoalRailcostunit	: Amount: 2143
+	
+	TransSample2		: String: 2144
+	TransSample2Sub		: String: 2145
+	TransSample2Inr		: Amount: 2146
+	
+
+[#Part: SNGLLINE Narration]
+
+   Add : Line : Before : VCH SingleNarr : TransferCost;PoApprovalLine,TransferCost
+
+
+[Line: TransferCost]
+	
+	Field : Medium prompt,TransferCost
+	Local : Field : Medium Prompt : set as : "Cost Details"
+	Local : Field : Medium Prompt : Invisible : NOt $voucherTypeName = "Coal Transfer Posting"
+
+	[Field: TransferCost]
+
+		Use : Logical Field
+		Set as		: No
+	    Set Always  : Yes
+	  	SubForm		: TransferCost : $$Value
+		Invisible : Not $voucherTypeName = "Coal Transfer Posting"
+		
+[Report: TransferCost]
+
+	Form: TransferCost
+	Title: $$LocaleString:"Purchase Cost Details"
+		
+[Form: TransferCost]
+	
+	Parts          : Form SubTitle,TransferCost
+    Height 		   : 100% page	 
+	Width  		   : 80% page
+    FullWidth      : No
+	SpaceTop       : 1
+    SpaceBottom    : 1
+    SpaceLeft      : 1
+    SpaceRight     : 1
+    Background     : @@SV_PURCHASEORDERVOUCHER
+    Local          : Field : Form SubTitle: Info : $$LocaleString:"Domestic Details"
+    Horizontal Alignment	: Centre
+    Vertical Alignment      : Centre
+	No Confirm	: Yes  
+	
+[Part: TransferCost]
+	
+	Line: CoalCostTitle,TransOcFre,TransDDwgt,TransDem,TransInsur,TransSample,TransSample2,TransSTock,+
+	TransDraft,TransSAmple,TransLia,TransWhar,TransEquip,TransDisc,TransStev,TransWharEn,TransTrans,+
+	TransHandling,TransVesIn
+	Local: Line: Default : Space Top: .5
+	Local: Line: Default : Space Bottom: .5
+	Border: Thin Box
+	Local: Line: Default : Border: Thin Bottom
+	
+[Line: TransOcFre]
+	
+	Field: TransOcFre,TransOcFreSub,TransOcFresyn,TransOcFreDol,TransOcFreExch,TransOcFreInr
+	
+	[Field: TransOcFre]
+		
+		Use: Name Field
+		Set as: "Ocean Freight"
+		Storage: TransOcFre
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransOcFreSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransOcFreSub
+		Storage: TransOcFreSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransOcFresyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransOcFresyn
+		Storage: TransOcFresyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransOcFreSub
+		Skip: Yes
+				
+	[Field: TransOcFreDol]
+		
+		Use: Amount Field
+		Set as: $TransOcFreDol
+		Storage: TransOcFreDol
+		Skip: Yes
+		
+	[Field: TransOcFreExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransOcFreExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransOcFreInr]
+		
+		Use         : Amount Field
+		Set			: $TransOcFreInr
+		Set Always	: Yes	
+		Storage		: TransOcFreInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransDDwgt]
+	
+	Field: TransDDwgt,TransDDwgtSub,TransDDwgtsyn,TransDDwgtDol,TransDDwgtExch,TransDDwgtInr
+	
+	[Field: TransDDwgt]
+		
+		Use: Name Field
+		Set as: "Dead Weight"
+		Storage: TransDDwgt
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransDDwgtSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransDDwgtSub
+		Storage: TransDDwgtSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransDDwgtsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransDDwgtsyn
+		Storage: TransDDwgtsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransDDwgtSub
+		Skip: Yes
+				
+	[Field: TransDDwgtDol]
+		
+		Use: Amount Field
+		Set as: $TransDDwgtDol
+		Storage: TransDDwgtDol
+		Skip: Yes
+		
+	[Field: TransDDwgtExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransDDwgtExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransDDwgtInr]
+		
+		Use         : Amount Field
+		Set			: $TransDDwgtInr
+		Set Always	: Yes	
+		Storage		: TransDDwgtInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransDem]
+	
+	Field: TransDem,TransDemSub,TransDemsyn,TransDemDol,TransDemExch,TransDemInr
+	
+	[Field: TransDem]
+		
+		Use: Name Field
+		Set as: "Demurrage"
+		Storage: TransDem
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransDemSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransDemSub
+		Storage: TransDemSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransDemsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransDemsyn
+		Storage: TransDemsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransDemSub
+		Skip: Yes
+				
+	[Field: TransDemDol]
+		
+		Use: Amount Field
+		Set as: $TransDemDol
+		Storage: TransDemDol
+		Skip: Yes
+		
+	[Field: TransDemExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransDemExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransDemInr]
+		
+		Use         : Amount Field
+		Set			: $TransDemInr
+		Set Always	: Yes	
+		Storage		: TransDemInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransInsur]
+	
+	Field: TransInsur,TransInsurSub,TransInsursyn,TransInsurDol,TransInsurExch,TransInsurInr
+	
+	[Field: TransInsur]
+		
+		Use: Name Field
+		Set as: "INSURANCE"
+		Storage: TransInsur
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransInsurSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransInsurSub
+		Storage: TransInsurSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransInsursyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransInsursyn
+		Storage: TransInsursyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransInsurSub
+		Skip: Yes
+				
+	[Field: TransInsurDol]
+		
+		Use: Amount Field
+		Set as: $TransInsurDol
+		Storage: TransInsurDol
+		Skip: Yes
+		
+	[Field: TransInsurExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransInsurExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransInsurInr]
+		
+		Use         : Amount Field
+		Set			: $TransInsurInr
+		Set Always	: Yes	
+		Storage		: TransInsurInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransSample]
+	
+	Field: TransSample,TransSampleSub,TransSamplesyn,TransSampleDol,TransSampleExch,TransSampleInr
+	
+	[Field: TransSample]
+		
+		Use: Name Field
+		Set as: "SAMPLING 1"
+		Storage: TransSample
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransSampleSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransSampleSub
+		Storage: TransSampleSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransSamplesyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransSamplesyn
+		Storage: TransSamplesyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransSampleSub
+		Skip: Yes
+				
+	[Field: TransSampleDol]
+		
+		Use: Amount Field
+		Set as: $TransSampleDol
+		Storage: TransSampleDol
+		Skip: Yes
+		
+	[Field: TransSampleExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransSampleExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransSampleInr]
+		
+		Use         : Amount Field
+		Set			: $TransSampleInr
+		Set Always	: Yes	
+		Storage		: TransSampleInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+
+[Line: TransSample2]
+	
+	Field: TransSample2,TransSample2Sub,TransSample2syn,TransSample2Dol,TransSample2Exch,TransSample2Inr
+	
+	[Field: TransSample2]
+		
+		Use: Name Field
+		Set as: "SAMPLING 2"
+		Storage: TransSample2
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransSample2Sub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransSample2Sub
+		Storage: TransSample2Sub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransSample2syn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransSample2syn
+		Storage: TransSample2syn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransSample2Sub
+		Skip: Yes
+				
+	[Field: TransSample2Dol]
+		
+		Use: Amount Field
+		Set as: $TransSample2Dol
+		Storage: TransSample2Dol
+		Skip: Yes
+		
+	[Field: TransSample2Exch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransSample2Exch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransSample2Inr]
+		
+		Use         : Amount Field
+		Set			: $TransSample2Inr
+		Set Always	: Yes	
+		Storage		: TransSample2Inr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+
+	
+[Line: TransSTock]
+	
+	Field: TransSTock,TransSTockSub,TransSTocksyn,TransSTockDol,TransSTockExch,TransSTockInr
+	
+	[Field: TransSTock]
+		
+		Use: Name Field
+		Set as: "Stock verification"
+		Storage: TransSTock
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransSTockSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransSTockSub
+		Storage: TransSTockSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransSTocksyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransSTocksyn
+		Storage: TransSTocksyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransSTockSub
+		Skip: Yes
+				
+	[Field: TransSTockDol]
+		
+		Use: Amount Field
+		Set as: $TransSTockDol
+		Storage: TransSTockDol
+		Skip: Yes
+		
+	[Field: TransSTockExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransSTockExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransSTockInr]
+		
+		Use         : Amount Field
+		Set			: $TransSTockInr
+		Set Always	: Yes	
+		Storage		: TransSTockInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransDraft]
+	
+	Field: TransDraft,TransDraftSub,TransDraftsyn,TransDraftDol,TransDraftExch,TransDraftInr
+	
+	[Field: TransDraft]
+		
+		Use: Name Field
+		Set as: "DRAFT SURVEY"
+		Storage: TransDraft
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransDraftSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransDraftSub
+		Storage: TransDraftSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransDraftsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransDraftsyn
+		Storage: TransDraftsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransDraftSub
+		Skip: Yes
+				
+	[Field: TransDraftDol]
+		
+		Use: Amount Field
+		Set as: $TransDraftDol
+		Storage: TransDraftDol
+		Skip: Yes
+		
+	[Field: TransDraftExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransDraftExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransDraftInr]
+		
+		Use         : Amount Field
+		Set			: $TransDraftInr
+		Set Always	: Yes	
+		Storage		: TransDraftInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+		
+[Line: TransLia]
+	
+	Field: TransLia,TransLiaSub,TransLiasyn,TransLiaDol,TransLiaExch,TransLiaInr
+	
+	[Field: TransLia]
+		
+		Use: Name Field
+		Set as: "Liaisoning"
+		Storage: TransLia
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransLiaSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransLiaSub
+		Storage: TransLiaSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransLiasyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransLiasyn
+		Storage: TransLiasyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransLiaSub
+		Skip: Yes
+				
+	[Field: TransLiaDol]
+		
+		Use: Amount Field
+		Set as: $TransLiaDol
+		Storage: TransLiaDol
+		Skip: Yes
+		
+	[Field: TransLiaExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransLiaExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransLiaInr]
+		
+		Use         : Amount Field
+		Set			: $TransLiaInr
+		Set Always	: Yes	
+		Storage		: TransLiaInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransWhar]
+	
+	Field: TransWhar,TransWharSub,TransWharsyn,TransWharDol,TransWharExch,TransWharInr
+	
+	[Field: TransWhar]
+		
+		Use: Name Field
+		Set as: "WHARFAGE"
+		Storage: TransWhar
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransWharSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransWharSub
+		Storage: TransWharSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransWharsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransWharsyn
+		Storage: TransWharsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransWharSub
+		Skip: Yes
+				
+	[Field: TransWharDol]
+		
+		Use: Amount Field
+		Set as: $TransWharDol
+		Storage: TransWharDol
+		Skip: Yes
+		
+	[Field: TransWharExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransWharExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransWharInr]
+		
+		Use         : Amount Field
+		Set			: $TransWharInr
+		Set Always	: Yes	
+		Storage		: TransWharInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransEquip]
+	
+	Field: TransEquip,TransEquipSub,TransEquipsyn,TransEquipDol,TransEquipExch,TransEquipInr
+	
+	[Field: TransEquip]
+		
+		Use: Name Field
+		Set as: "EQUIPMENT"
+		Storage: TransEquip
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransEquipSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransEquipSub
+		Storage: TransEquipSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransEquipsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransEquipsyn
+		Storage: TransEquipsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransEquipSub
+		Skip: Yes
+				
+	[Field: TransEquipDol]
+		
+		Use: Amount Field
+		Set as: $TransEquipDol
+		Storage: TransEquipDol
+		Skip: Yes
+		
+	[Field: TransEquipExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransEquipExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransEquipInr]
+		
+		Use         : Amount Field
+		Set			: $TransEquipInr
+		Set Always	: Yes	
+		Storage		: TransEquipInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransDisc]
+	
+	Field: TransDisc,TransDiscSub,TransDiscsyn,TransDiscDol,TransDiscExch,TransDiscInr
+	
+	[Field: TransDisc]
+		
+		Use: Name Field
+		Set as: "DISCHARGE"
+		Storage: TransDisc
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransDiscSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransDiscSub
+		Storage: TransDiscSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransDiscsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransDiscsyn
+		Storage: TransDiscsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransDiscSub
+		Skip: Yes
+				
+	[Field: TransDiscDol]
+		
+		Use: Amount Field
+		Set as: $TransDiscDol
+		Storage: TransDiscDol
+		Skip: Yes
+		
+	[Field: TransDiscExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransDiscExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransDiscInr]
+		
+		Use         : Amount Field
+		Set			: $TransDiscInr
+		Set Always	: Yes	
+		Storage		: TransDiscInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransStev]
+	
+	Field: TransStev,TransStevSub,TransStevsyn,TransStevDol,TransStevExch,TransStevInr
+	
+	[Field: TransStev]
+		
+		Use: Name Field
+		Set as: "STEVDORING"
+		Storage: TransStev
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransStevSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransStevSub
+		Storage: TransStevSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransStevsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransStevsyn
+		Storage: TransStevsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransStevSub
+		Skip: Yes
+				
+	[Field: TransStevDol]
+		
+		Use: Amount Field
+		Set as: $TransStevDol
+		Storage: TransStevDol
+		Skip: Yes
+		
+	[Field: TransStevExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransStevExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransStevInr]
+		
+		Use         : Amount Field
+		Set			: $TransStevInr
+		Set Always	: Yes	
+		Storage		: TransStevInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+
+[Line: TransWharEn]
+	
+	Field: TransWharEn,TransWharEnSub,TransWharEnsyn,TransWharEnDol,TransWharEnExch,TransWharEnInr
+	
+	[Field: TransWharEn]
+		
+		Use: Name Field
+		Set as: "WHARFAGE"
+		Storage: TransWharEn
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransWharEnSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransWharEnSub
+		Storage: TransWharEnSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransWharEnsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransWharEnsyn
+		Storage: TransWharEnsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransWharEnSub
+		Skip: Yes
+				
+	[Field: TransWharEnDol]
+		
+		Use: Amount Field
+		Set as: $TransWharEnDol
+		Storage: TransWharEnDol
+		Skip: Yes
+		
+	[Field: TransWharEnExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransWharEnExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransWharEnInr]
+		
+		Use         : Amount Field
+		Set			: $TransWharEnInr
+		Set Always	: Yes	
+		Storage		: TransWharEnInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransTrans]
+	
+	Field: TransTrans,TransTransSub,TransTranssyn,TransTransDol,TransTransExch,TransTransInr
+	
+	[Field: TransTrans]
+		
+		Use: Name Field
+		Set as: "Liaisoning Charges"
+		Storage: TransTrans
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransTransSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransTransSub
+		Storage: TransTransSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransTranssyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransTranssyn
+		Storage: TransTranssyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransTransSub
+		Skip: Yes
+				
+	[Field: TransTransDol]
+		
+		Use: Amount Field
+		Set as: $TransTransDol
+		Storage: TransTransDol
+		Skip: Yes
+		
+	[Field: TransTransExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransTransExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransTransInr]
+		
+		Use         : Amount Field
+		Set			: $TransTransInr
+		Set Always	: Yes	
+		Storage		: TransTransInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+	
+[Line: TransHandling]
+	
+	Field: TransHandling,TransHandlingSub,TransHandlingsyn,TransHandlingDol,TransHandlingExch,TransHandlingInr
+	
+	[Field: TransHandling]
+		
+		Use: Name Field
+		Set as: "Handling loss"
+		Storage: TransHandling
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransHandlingSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransHandlingSub
+		Storage: TransHandlingSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransHandlingsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransHandlingsyn
+		Storage: TransHandlingsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransHandlingSub
+		Skip: Yes
+				
+	[Field: TransHandlingDol]
+		
+		Use: Amount Field
+		Set as: $TransHandlingDol
+		Storage: TransHandlingDol
+		Skip: Yes
+		
+	[Field: TransHandlingExch]
+		
+		Use		: Amount Field
+		Set as	: $BatchRate
+		Storage	: TransHandlingExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Skip: Yes
+				
+	[Field: TransHandlingInr]
+		
+		Use         : Amount Field
+		Set			: $TransHandlingInr
+		Set Always	: Yes	
+		Storage		: TransHandlingInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+		
+[Line: TransVesIn]
+	
+	Field: TransVesIn,TransVesInSub,TransVesInsyn,TransVesInDol,TransVesInExch,TransVesInInr
+	
+	[Field: TransVesIn]
+		
+		Use: Name Field
+		Set as: "VESSEL INSURANCE"
+		Storage: TransVesIn
+		Skip: if ($$ContextKeyword Contains "Purchase Cost" or $$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+	
+	[Field: TransVesInSub]
+		
+		Use: Name Field
+		Table: CostSupplier,End of List
+		Show Table: Always
+		Set as: $TransVesInSub
+		Storage: TransVesInSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		Width: 20% Page
+		
+	[Field: TransVesInsyn]
+		
+		Use: Name Field
+		Table		: Currency
+		Show Table	: Always	
+		Set as: $TransVesInsyn
+		Storage: TransVesInsyn
+		Width   : @@AmountWidth
+		Inactive:  $$IsEnd:$TransVesInSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+				
+	[Field: TransVesInDol]
+		
+		Use: Amount Field
+		Set as: $TransVesInDol
+		Storage: TransVesInDol
+		Inactive:  $$IsEnd:$TransVesInSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+		
+	[Field: TransVesInExch]
+		
+		Use		: Amount Field
+		Set as	: $TransVesInExch
+		Storage	: TransVesInExch
+		Width   : @@AmountWidth
+		Align: Center
+		Format: "Dicemal:4"
+		Inactive:  $$IsEnd:$TransVesInSub
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No
+				
+	[Field: TransVesInInr]
+		
+		Use         : Amount Field
+		Set			: #TransVesInDol * #TransVesInExch
+		Set Always	: Yes	
+		Storage		: TransVesInInr
+		Width       : @@AmountWidth
+		Skip: if ($$ContextKeyword = "Cost Transfer Entry") Then Yes Else No	
+		
+;;;;;;;;;;;;;;;;;;;;;Auto update Starts here;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+[Report: CPortorder]
+	
+	Use		: Day book 
+	Family  : $$Translate:"Cost of Purchase"
+	Variables   : SV FromDate, SV ToDate, SV SortMethod ,isledgerwise
+	Set         	: SV From Date          : $$CurrentDate:##SVCurrentDate
+    Set         	: SV To Date            : $$CurrentDate:##SVCurrentDate
+	Title	: "Adding Cost of Purchase"
+  	Local	: Collection	: Default		: Add	: Filter	:  OpgcoalTransOrder
+	Local	: Form			: Daybook 		: Add	: Button	:  CostButtonTransfer 
+	
+[Report: CPortCom]
+	
+	Use		: Day book 
+	Family  : $$Translate:"Cost of Purchase Completed"
+	Variables   : SV FromDate, SV ToDate, SV SortMethod ,isledgerwise
+	Set         	: SV From Date          : $$CurrentDate:##SVCurrentDate
+    Set         	: SV To Date            : $$CurrentDate:##SVCurrentDate
+	Title	: "Adding Cost of Purchase"
+  	Local	: Collection	: Default		: Add	: Filter	:  OpgcoalTransCompltOrder
+	
+[Collection : OpgCoalTransfer]
+	
+	Type	:	Voucher
+	Filter	:	OpgcoalTransOrder
+	Fetch	:	Vouchernumber
+	
+[Button:  CostButtonTransfer]
+
+	Title		: "Cost Transfer Update" 
+	Key			: Alt + s 
+	Action		: call:   CostTransUpdate 
+	Mode		: Display
+	Inactive	: (Not $$Allow:Alter:ApproveVouchers)
+	
+[Function	: CostTransUpdate]
+	
+	Variable	:  VMasterID 	: String 	:  "ID:"+$$String:$MasterID  
+	05	: Walk Collection	: SelectedDataz
+	15	: Set				: VMasterID : "ID:"+$$String:$MasterID 
+	19	: Execute       	: CostTransUpdate 
+	20  : End Walk 
+		
+[Collection: CoalTransCostCol]
+	
+	Title		: $$LocaleString:"List of Coal import Purchase Order"
+	Sub Title	: $$LocaleString:"Purchase Order No.",$$LocaleString:"System Id",$$LocaleString:"SKU Name",$$LocaleString:"Qty"  
+	Source Collection	: OpgCoalTransfer
+	Walk		: InventoryEntriesOut,batchallocations
+	Fetch     	: VoucherNumber,PartyLedgerName,StockItemName,Reference,BilledQty,Amount,BasicShipVesselNo
+	Fetch		: OpgFVchOwn,OpgFDriName,VchMemoDrLic,OpgFDriMobile,OpgEwayBill	
+	Compute		: RepMasteridz		: $Masterid
+	Compute		: RepNplPurDt 		: $Date
+ 	Compute		: RepNplVchNo		: $VoucherNumber
+	Compute		: RepNplSupplier	: $PartyLedgerName
+	Compute		: RepNplStockitem	: $StockItemName
+	Compute		: RepNplQty			: $BilledQty
+	Compute		: RepNplRate		: $Rate
+	Compute		: RepNplValue		: $Amount
+	Compute		: RepOrderNo		: $ORDERNO	
+	Compute		: RepOrderNoDt		: $ORDERDUEDATE	
+	Compute		: VCHName			: $VouchertypeName
+	Compute		: RepBatchName		: $BatchName	
+	Compute		: OpgRate			: $Rate
+	Compute		: Opggodown			: $GodownName
+	Compute		: OpgorderDt		: $$Owner:$$Owner:$BasicOrderDate
+	Compute		: OpgPartName		: $PartNo:StockItem:$StockITemName
+	Compute		: OpgVehicle		: $$Owner:$$Owner:$BasicShipVesselNo
+	Compute		: OpgVehicleOwner	: $$Owner:$$Owner:$OpgFVchOwn
+	Compute		: OpgDriveName		: $$Owner:$$Owner:$OpgFDriName
+	Compute		: OpgDriverLic		: $$Owner:$$Owner:$VchMemoDrLic
+	Compute		: OpgDriverMobile	: $$Owner:$$Owner:$OpgFDriMobile
+	Compute		: OpgEnter			: $$Owner:$OpgEnteredBy
+	Compute		: OpgNarr			: $Narration
+	Compute		: OpgMemoTime		: $$Owner:$$Owner:$VchMemoTime	
+	Compute		: OpgMonthDt		: $$FullMonthName:$Date
+	Compute		: OpgDepartRep		: $OPGDepart
+	Compute		: OPgMemoCreate		: $$Owner:$$Owner:$VchMemoTime
+	Compute		: OpgTickMemocrTime : $$Owner:$$Owner:$TickMemocrTime
+	Compute		: OPGTickdcoutTime	: $$Owner:$$Owner:$TickdcoutTime
+	Compute		: OpgTickDCGrossWgt : $$Owner:$$Owner:$TickDCGrossWgt
+	Compute		: OpgTickDcgrsTarWgt: $$Owner:$$Owner:$TickDcgrsTarWgt
+	Compute		: OpgTickmemodt		: $$Owner:$$Owner:$Tickmemodt
+	Compute		: OpgGatememoNoGRN	: $$Owner:$$Owner:$GatememoNoGRN
+	Compute		: OpgEwayBill		: $EwayBillDetails[Last].BillNumber	
+	Compute		: OPgRCCCentre		: $CostCentreName
+	Format		: $RepNplVchNo,10
+	Format		: $RepMasteridz,8
+	Format		: $RepNplStockitem,20
+	Format		: $RepNplQty,12
+	Format		: $OPgRCCCentre
+
+	
+[Report:  CostTransUpdate]
+	
+	Title		: $$LocaleString:"Cost Transfer Entry"
+	Form 		: CostTransUpdate 
+	Object 		: Voucher : ##VMasterID
+		
+	[Form	: CostTransUpdate]
+		
+		Part		: CostTransUpdate
+	 	On			: Form Accept	: Yes	: Call	:  AutoPoTranOceanFreight
+		No Confirm	: Yes  
+		Width		: 80% Page
+		Height		: 100% Page
+							
+		[Part: CostTransUpdate]
+		
+			Line : CoalimpVchNo,CoalimpVchdt,CoalPartyName,CoalCostTitle,TransOcFre,TransDDwgt,+
+			TransDem,TransInsur,TransSample,TransSample2,TransSTock,TransDraft,TransSAmple,TransLia,TransWhar,+
+			TransEquip,TransDisc,TransStev,TransWharEn,TransTrans,TransHandling,TransVesIn,+
+			CoalskyOrderdt,CoalSkuName,CoalSkuBatch,CoalSkyloc,CoalSkuQty,CoalSkuValue,+
+			CoalTranscostunit,CoaCostCcentre
+			Local: Line: Default : Space Top: .25
+			Local: Line: Default : Space Bottom: .25
+			Border: Thin Box
+			Local: Line: Default : Border: Thin Bottom
+			
+[Line: CoalTranscostunit]
+	
+	Field: Medium Prompt,TCoalTranscostunit,Short Prompt,CoalTranscostunit
+	Local: Field: Medium Prompt : Set as: "Total Cost"
+	Local: Field: Short Prompt	: Set as: "Cost Per Unit In INR"
+	Local: Field: Short Prompt	: Width: @@Longwidth
+	
+		
+	[Field : TCoalTranscostunit]
+		
+		Use: Amount Field
+		Set as: $CoalSkuValue + $TransOcFreInr + $TransDDwgtInr + $TransDemInr + $TransInsurInr + $TransSampleInr + $TransSTockInr + $TransDraftInr + $TransLiaInr + $TransWharInr + $TransEquipInr + $TransDiscInr + $TransStevInr + $TransWharEnInr + $TransTransInr + $TransHandlingInr + $TransVesInInr
+		Set Always: Yes
+		Storage: TCoalTranscostunit 
+		Skip: Yes
+		
+	[Field: CoalTranscostunit]
+		
+		Use: Amount Field
+		Set as: #TCoalTranscostunit  / $$Number:#CoalSkuQty
+		Set Always: Yes
+		Storage: CoalTranscostunit
+		Skip: Yes
+		
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Purchase Order starts here;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Ocean Freight;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutoPoTranOceanFreight]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransOcFreInr * -1
+	Local Formula: CustomerAmt 				: #TransOcFreInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransOcFreInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Ocean Freight":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransOcFreSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransOcFreSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 		INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 			SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 			SET VALUE	: IsDeemedPositive	: Yes
+	460	: 			SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:		INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 			SET VALUE		: LedgerName		: "Ocean Freight"  
+	640	: 			Set Value		: Amount 			: @TaxAssableValue
+	650	: 			SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: SET TARGET	: ... 	 
+	
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutoPoTranDead
+	
+	510	: MSGBOX			: "Status" 			: "Ocean Freight \n Purchase Order \n Created Successfully  !!"
+	511: End If
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Dead Weight;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutoPoTranDead]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransDDwgtInr * -1
+	Local Formula: CustomerAmt 				: #TransDDwgtInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransDDwgtInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Dead Weight":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransDDwgtSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransDDwgtSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+	
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Dead Weight"  
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: 	SET TARGET	: ... 	 
+	
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutoPoTranDemurrage
+	
+	510	: MSGBOX			: "Status" 			: "Dead Weight \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Demurrage;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutoPoTranDemurrage]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransDemInr * -1
+	Local Formula: CustomerAmt 				: #TransDemInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransDemInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Demurrage":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransDemSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransDemSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Demurrage"  
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutoPoTranInsurance
+	
+	510	: MSGBOX			: "Status" 			: "Demurrage \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Insurance;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutoPoTranInsurance]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransInsurInr * -1
+	Local Formula: CustomerAmt 				: #TransInsurInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransInsurInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Insurance":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransInsurSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransInsurSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Insurance"  
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutoPoTranSamplie
+	
+	510	: MSGBOX			: "Status" 			: "Insurance \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Sampling 1;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutoPoTranSamplie]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransSampleInr * -1
+	Local Formula: CustomerAmt 				: #TransSampleInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransSampleInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Sampling 1":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransSampleSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransSampleSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+	
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "SAMPLING AND ANALYSIS CHARGES - LP"  
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutoPoTranSamplie2
+	
+	510	: MSGBOX			: "Status" 			: "Sampling 1 \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Sampling 2;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutoPoTranSamplie2]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransSample2Inr * -1
+	Local Formula: CustomerAmt 				: #TransSample2Inr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransSample2Inr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Sampling 2":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransSample2Sub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransSample2Sub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+	
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "SAMPLING AND ANALYSIS CHARGES - LP 2"  
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: Stockver
+	
+	510	: MSGBOX			: "Status" 			: "Sampling 2 \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Stockver;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: Stockver]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransSTockInr * -1
+	Local Formula: CustomerAmt 				: #TransSTockInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransSTockInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Stock Verification":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransSTockSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransSTockSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Stock verification(survey) at paradip LP" 
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutopoDraft
+	
+	510	: MSGBOX			: "Status" 			: "Stock Verification \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Draft;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutopoDraft]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransDraftInr * -1
+	Local Formula: CustomerAmt 				: #TransDraftInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransDraftInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Draft":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransDraftSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransDraftSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "DRAFT SURVEY - LP (LUMP SUM)"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: Autopoliaisoning
+	
+	510	: MSGBOX			: "Status" 			: "Draft \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of liaisoning;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: Autopoliaisoning]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransLiaInr * -1
+	Local Formula: CustomerAmt 				: #TransLiaInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransLiaInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Liaisoning":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransLiaSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransLiaSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+	
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Liaisoning & Supervision Charges"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+
+ 	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutopoTranWharfage
+	
+	510	: MSGBOX			: "Status" 			: "Liaisoning \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Wharfage;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutopoTranWharfage]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransWharInr * -1
+	Local Formula: CustomerAmt 				: #TransWharInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransWharInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Wharfage":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransWharSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransWharSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "WHARFAGE (PARADIP PORT)"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutopoEquipment
+	
+	510	: MSGBOX			: "Status" 			: "Wharfage \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Equipment;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutopoEquipment]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransEquipInr * -1
+	Local Formula: CustomerAmt 				: #TransEquipInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransEquipInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Equipment":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransEquipSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransEquipSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+	
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "EQUIPMENT CHARGES  - LP *"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+
+ 	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutopoTransDischarge
+	
+	510	: MSGBOX			: "Status" 			: "Equipment \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Discharge;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutopoTransDischarge]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransDiscInr * -1
+	Local Formula: CustomerAmt 				: #TransDiscInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransDiscInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Discharge":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransDiscSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransDiscSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+	
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Discharge Port Agency Charges"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutopoStevdoring
+	
+	510	: MSGBOX			: "Status" 			: "Discharge \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Stevdoring;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutopoStevdoring]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransStevInr * -1
+	Local Formula: CustomerAmt 				: #TransStevInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransStevInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Stevdoring":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransStevSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransStevSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 ;;$$Negative:($$TgtObject:($$AsQty:##mQty))
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 ;;$$Negative:$$AsAmount:@PartyLedgerAmt
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "STEVDORING CHARGES ENNORE"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: SET TARGET	: ... 	 
+	
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutopoWharfageEn
+	
+	510	: MSGBOX			: "Status" 			: "Stevdoring \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Wharfage ennore;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutopoWharfageEn]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransWharEnInr * -1
+	Local Formula: CustomerAmt 				: #TransWharEnInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransWharEnInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Wharfage Ennore":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransWharEnSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransWharEnSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : Log: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "WHARFAGE CHARGE ENNORE"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: 	SET TARGET	: ... 	 
+
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: 	Call: AutopoTransport
+	
+	510	: 	MSGBOX			: "Status" 			: "Wharfage Ennore \n Purchase Order \n Created Successfully  !!"
+	511	: 	End If
+	
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Transport;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutopoTransport]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransTransInr * -1
+	Local Formula: CustomerAmt 				: #TransTransInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransTransInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Liaisoning Charges":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransTransSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransTransSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : 	Log	: @CustomerAmt
+		
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Liaisoning Charges"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: 	SET TARGET	: ... 	 
+	
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutopoTransHandling
+	
+	510	: MSGBOX			: "Status" 			: "Liaisoning Charges \n Purchase Order \n Created Successfully  !!"
+	511: End If
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Handling;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;		
+
+[Function: AutopoTransHandling]
+	
+	Variable		: Row		 	: Number
+	Variable		: stringQty	 	: String
+	Variable		: StringAmt	 	: String
+	Variable		: StringRate 	: String
+	Variable		: vDate			: Date	
+	Variable		: mVoucherNumber: String	
+	Variable		: mPartyName	: String
+	Variable		: mStockItem	: String
+	Variable		: mQty			: Number
+	Variable		: mRate			: Number
+	Variable		: mValue		: Amount
+	Variable		: mBatchName	: String
+	Variable		: mVehicleNo	: String
+	Variable		: mvehicleOwner	: String
+	Variable		: mDriverName	: String
+	Variable		: mDriverLic	: String
+	Variable		: mDriverPhone	: String
+	Variable		: mOrderNo		: String
+	Variable		: mOrderDt		: Due Date	
+	Variable		: mGodownname	: String
+	Variable		: vLedStateName : String
+	Variable		: vPinCode		: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN	: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+												
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+	Local Formula: PartyLedgerAmt			: #TransHandlingInr * -1
+	Local Formula: CustomerAmt 				: #TransHandlingInr  ;;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #TransHandlingInr
+		
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Handling Charges":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	90	: 	Set				: mPartyName				: #TransHandlingSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	212 :	Log				: @PartyLedgerAmt
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	221A: 	Log				: ##mPartyName
+	221F: 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	222	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransHandlingSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: @CustomerAmt + 1
+	270	: 	SET TARGET		: ..
+		
+	271 : 	Log	: @CustomerAmt
+	
+	0180 : 	CALL		: CoalinsEISupplAdrs 
+	0182 : 	Set Value	: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value	: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value	: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value	: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL		: CoalinsConEISupplAdrs 
+	0190 : 	Set Value	: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value	: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value	: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value	: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Coal Handling Charges"
+	640	: 		Set Value		: Amount 			: @TaxAssableValue
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: 	SET TARGET	: ... 	 
+	
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: Call: AutoVessalIns
+	
+	510	: MSGBOX			: "Status" 			: "Handling Charges \n Purchase Order \n Created Successfully  !!"
+	511: End If
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Creation of Vessal Insurance;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;			
+
+[Function: AutoVessalIns]
+	
+	Variable		: Row		 		: Number
+	Variable		: stringQty	 		: String
+	Variable		: StringAmt	 		: String
+	Variable		: StringRate 		: String
+	Variable		: vDate				: Date	
+	Variable		: mVoucherNumber	: String	
+	Variable		: mPartyName		: String
+	Variable		: mStockItem		: String
+	Variable		: mQty				: Number
+	Variable		: mRate				: Amount 
+	Variable		: mValue			: Amount 
+	Variable		: FxAmt				: String	
+	
+	Variable		: ForexCurrency		: String	
+	Variable		: ForexValue		: Amount
+	Variable		: ForexExchnage		: String
+	Variable		: ForexInrValue		: Amount	
+	
+	Variable		: mBatchName		: String
+	Variable		: mVehicleNo		: String
+	Variable		: mvehicleOwner		: String
+	Variable		: mDriverName		: String
+	Variable		: mDriverLic		: String
+	Variable		: mDriverPhone		: String
+	Variable		: mOrderNo			: String
+	Variable		: mOrderDt			: Due Date	
+	Variable		: mGodownname		: String
+	Variable		: vLedStateName 	: String
+	Variable		: vPinCode			: String
+	Variable		: vCountryofResidence : String
+	Variable		: vPartyGSTIN		: String
+	Variable		: VCONSIGNORADDRESS : String : "OPG Nagar, Madharpakkam Road, Periyaobulapuram Village, Gummidippondi, 601201"
+	
+	Local Formula	: VcDate	 	: $vyvchDate:Company:$$Currentcompany
+	Local Formula	: VcType	 	: $vyvchType:Company:$$Currentcompany
+	Local Formula	: stdQty	 	: $$Number:##stringQty
+	Local Formula	: vcGodownNam	: $vyGodownNam:Company:$$Currentcompany   
+	Local Formula	: GodownNam2	: $VayaGdwn2:Company:$$Currentcompany  
+	Local Formula	: LPopngrate	: ($$CurrentValue:$OpeningRate:StockItem:$vyStkName)
+	
+	Local Formula: systime					:   $$SysInfo:SystemTimeHMS 
+	Local Formula: SystimeinNumber			:   $$String:@systime
+	Local Formula: SystimeFirst				:   $$StringPart:@SystimeinNumber:6:2
+	Local Formula: SystimeSecond			:   $$StringPart:@SystimeinNumber:3:2
+	Local Formula: Systimethird				: 	$$StringPart:@SystimeinNumber:0:2
+	Local Formula: Sysdate					:   $$String:$$Machinedate 
+	Local Formula: SysdateinNumber			:   $$String:@Sysdate
+	Local Formula: Sysdateyear				:   $$YearOfDate:$$Machinedate ;;$$StringPart:@Sysdate:6:2
+	Local Formula: SysdateMonth				:   $$ShortMonthName:$$Machinedate 
+	Local Formula: SysdateDAte				:   $$DayOfDate:$$Machinedate 
+	
+	
+	Local Formula: SysMonthNumber			:   if @SysdateMonth Contains "Jan" Then "01" Else,+
+												if @SysdateMonth Contains "Feb" Then "02" Else,+
+												if @SysdateMonth Contains "Mar" Then "03" Else,+
+												if @SysdateMonth Contains "Apr" Then "04" Else,+
+												if @SysdateMonth Contains "May" Then "05" Else,+
+												if @SysdateMonth Contains "Jun" Then "06" Else,+
+												if @SysdateMonth Contains "Jul" Then "07" Else,+
+												if @SysdateMonth Contains "Aug" Then "08" Else,+
+												if @SysdateMonth Contains "Sep" Then "09" Else,+
+												if @SysdateMonth Contains "Oct" Then "10" Else,+
+												if @SysdateMonth Contains "Nov" Then "11" Else,+
+												if @SysdateMonth Contains "Dec" Then "12" Else ""									
+		
+	Local Formula: PartyLedgerAmt			: #CoalOcFreightDol ;* -1
+	Local Formula: CustomerAmt 				: #CoalOcFreightDol ;+ @TGst ;; $$AsAmount:(#CoalInsrAmt/2) + $$AsAmount:(#CoalInsrAmt/2) * -1 ;;+ $$AsAmount:##mQty*400
+	Local Formula: TaxAssableValue			: #CoalOcFreightDol
+	
+	Local Formula: SystimeFour				: @Systimethird + @SystimeSecond + @SystimeFirst + $$String:@SysdateDAte + @SysMonthNumber + $$String:@Sysdateyear
+				
+	01 	:   QUERY Box 	:"Do you Want to Create\n  Purchase Order for\n Vessal Insurance":  Yes:No
+	02  :   IF			: $$LastResult ;; : RETURN
+		
+	10	: 	SET FILE LOG ON 
+	20	: 	NEW OBJECT		: Voucher
+	30  : 	SET             : SVViewName 				: $$SysName:InvVchView
+	35  : 	SET             : SVVoucherType				: $$IsPurcOrder
+	
+	36	:   Set				: ForexCurrency				: #TransVesInsyn 
+	37	:   Set				: ForexValue				: #TransVesInDol 
+	38	:   Set				: ForexExchnage				: #TransVesInExch
+	39	:   Set				: ForexInrValue				: #TransVesInInr
+	
+	39A :   Set				: FxAmt 					: ##ForexCurrency + $$String:##ForexValue ;;+ "@ INR"+ $$String:##ForexExchnage+"/"+ ##ForexCurrency +"= INR"+ $$String:##CoalOcFreightAmt 
+	
+	61	:   Set				: mValue					: #CoalOcFreightDol
+	62	:   Set				: mRate						: #CoalOcFreightExchage
+	90	: 	Set				: mPartyName				: #TransVesInSub	
+	100	: 	Set				: mStockItem				: #CoalSkuName	
+	101	:   Set				: mOrderDt					: #CoalskyOrderdt
+	
+	102	: 	Log				: ##ForexCurrency
+	103	:   Log				: ##ForexValue
+	104	:   Log				: ##ForexExchnage 
+	105	:   Log				: ##ForexInrValue	
+	
+	106	:   Log				: ##FxAmt	
+	
+	40	: 	SET VALUE		: Date						: $$Date:$$Machinedate
+	50	: 	SET VALUE		: VoucherTypeName			: "Purchase order - Coal (Service)"
+	60	: 	SET VALUE		: IsInvoice					: Yes
+	
+	215 : 	Set Value		: Reference					: @SystimeFour
+	221 : 	Set Value		: GSTREGISTRATIONTYPE		: "Regular" 
+	222 : 	Set Value		: Ultrauser					: "No"	
+	221G:   Set Value		: CCSupplierpONo			: #CoalimpVchNo
+	223	:   Set Value		: CCQty						: #CoalSkuQty
+    225 : 	Set Value		: PLACEOFSUPPLY				: "Tamil Nadu" 
+	230	: 	INSERT COLLECTION OBJECT					: LEDGERENTRIES
+	240	: 	SET VALUE		: LedgerName				: #TransVesInSub
+	250	: 	SET VALUE		: IsDeemedPositive			: No
+	260	: 	SET VALUE		: Amount					: $$Negative:$$AsAmount:##FxAmt
+	270	: 	SET TARGET		: ..
+	
+	0180 : 	CALL			: CoalFreInsEIAdrs 
+	0182 : 	Set Value		: STATENAME	:$(Ledger, ##mPartyName).LedStateName
+	0184 : 	Set Value		: PARTYPINCODE	: $(Ledger, ##mPartyName).PinCode
+	0186 : 	Set Value		: COUNTRYOFRESIDENCE	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0188 : 	Set Value		: PartyGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	
+	0189 : 	CALL			: CoalFreInsEISupplAdrs 
+	0190 : 	Set Value		: ConsigneeStateName	:$(Ledger, ##mPartyName).LedStateName
+	0191 : 	Set Value		: Consigneepincode	: $(Ledger, ##mPartyName).PinCode
+	0192 : 	Set Value		: ConsigneeCountryName	: $(Ledger, ##mPartyName).COUNTRYOFRESIDENCE
+	0193 : 	Set Value		: CONSIGNEEGSTIN	: $(Ledger, ##mPartyName).PARTYGSTIN
+	 
+	280	: 	INSERT COLLECTION OBJECT		: All INVENTORYENTRIES
+	290	: 	SET VALUE	: StockItemName		: ##mStockItem
+	300	: 	SET VALUE	: IsDeemedPositive	: No
+	340	: 	SET VALUE	: Amount			: 1 	 
+		
+	350	: 	INSERT COLLECTION OBJECT		: BATCHALLOCATIONS
+	352	:   Set Value	: OrderDueDate		: ##mOrderDt
+	360	: 	SET VALUE	: GodownName		: #CoalSkyloc
+	370	: 	SET VALUE	: BatchName			: #CoalSkuBatch
+	371	: 	SET VALUE	: IsDeemedPositive	: No
+	380	: 	SET VALUE	: ActualQty			: 0.010 
+	390	: 	SET VALUE	: BilledQty			: 0.010
+	410	: 	SET VALUE	: Amount			: 1
+	420	: 	SET TARGET	: ..
+			
+	430	: 	INSERT COLLECTION OBJECT		: ACCOUNTING ALLOCATIONS
+	440	: 		SET VALUE	: LedgerName		: "Purchase - Import Coal"
+	450	: 		SET VALUE	: IsDeemedPositive	: Yes
+	460	: 		SET VALUE	: Amount			: 1 
+	470	: 		SET TARGET	: ..
+	
+	620	:	INSERT COLLECTION OBJECT				: LEDGER ENTRIES
+	630	: 		SET VALUE		: LedgerName		: "Vessel Insurance"
+	640	: 		Set Value		: Amount 			:  $$Negative:$$AsAmount:##FxAmt
+	650	: 		SET VALUE		: IsDeemedPositive	: Yes
+	
+ 	700	: 	SET TARGET	: ... 	 
+	
+	480	:   SET VALUE   : PersistedView 	: ##SVViewName 
+	490	: 	CREATE TARGET
+	
+	500	: 	Call: CoalCostClosing
+	
+	510	: MSGBOX			: "Status" 			: "Vessal Insurance \n Purchase Order \n Created Successfully  !!"
+	511 : End If
+
+	
+	
+

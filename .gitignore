@@ -1,0 +1,39 @@
+# Dependency directories
+node_modules/
+po_opg_front/node_modules/
+po-import-OPG/node_modules/
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# Editor and IDE configurations
+.vscode/
+.idea/
+*.suo
+*.ntvsca
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project-specific uploads and generated test files
+po-import-OPG/uploads/*
+!po-import-OPG/uploads/.gitkeep
+po-import-OPG/test_output_*.xml
+po-import-OPG/test_output_ZCOL.xml
+po-import-OPG/inspect_duplicates.js
