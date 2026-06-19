@@ -417,6 +417,9 @@ function generateTallyXML(poGroup, vendorMap = {}) {
             const mappedName = condMap[condCode];
             
             const finalLedgerName = mappedName ? mappedName : exactKey.toString().replace(/\s+/g, ' ').trim();
+            if (finalLedgerName.toLowerCase().replace(/\s/g, '') === 'grossprice') {
+                return;
+            }
             const normalizedName = escapeXML(finalLedgerName);
             const cleanColName = col.toLowerCase().replace(/\s/g, '');
             

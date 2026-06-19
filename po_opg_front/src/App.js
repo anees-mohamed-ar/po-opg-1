@@ -13,6 +13,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [importTimeTaken, setImportTimeTaken] = useState(null);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -81,6 +82,8 @@ function App() {
 
     setImporting(true);
     setError(null);
+    setImportTimeTaken(null);
+    const startTime = Date.now();
 
     const posToImport = parsedPOs.filter(po => selectedPos.includes(po.poNumber));
     
@@ -146,6 +149,9 @@ function App() {
       }
     }
 
+    const endTime = Date.now();
+    const timeTakenSec = ((endTime - startTime) / 1000).toFixed(2);
+    setImportTimeTaken(timeTakenSec);
     setImporting(false);
   };
 
@@ -208,6 +214,7 @@ function App() {
     setSearchTerm('');
     setCurrentPage(1);
     setRowsPerPage(10);
+    setImportTimeTaken(null);
   };
 
   const togglePoExpand = (poNumber) => {
@@ -489,6 +496,12 @@ function App() {
                   ? `Importing selected vouchers to Tally... (${importResults.filter(r => ['success', 'failed'].includes(r.status)).length} of ${importResults.length} complete)`
                   : `Tally import completed. ${importResults.filter(r => r.status === 'success').length} successfully imported.`}
               </p>
+              
+              {importTimeTaken && !importing && (
+                <div className="import-time-display">
+                  Total time taken: <strong>{importTimeTaken} seconds</strong>
+                </div>
+              )}
               
               {!importing && (
                 <div className="action-buttons-container">

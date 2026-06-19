@@ -1141,5 +1141,21 @@ body {
   color: var(--text-primary);
 }
 
+.import-time-display {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+
+.import-time-display strong {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
 
 
