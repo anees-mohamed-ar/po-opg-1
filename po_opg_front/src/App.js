@@ -11,6 +11,8 @@ function App() {
   const [error, setError] = useState(null);
   const [expandedPo, setExpandedPo] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -96,6 +98,7 @@ function App() {
     }));
     
     setImportResults(initialResults);
+    setCurrentPage(1);
 
     // Process each PO sequentially to show progress in real-time
     for (let i = 0; i < posToImport.length; i++) {
@@ -203,6 +206,8 @@ function App() {
     setImportResults(null);
     setError(null);
     setSearchTerm('');
+    setCurrentPage(1);
+    setRowsPerPage(10);
   };
 
   const togglePoExpand = (poNumber) => {
@@ -245,6 +250,12 @@ function App() {
 
   const docTypeCounts = getDocTypeCounts();
   const uniqueDocTypes = Object.keys(docTypeCounts);
+
+  // Pagination calculations for importResults
+  const indexOfLastResult = currentPage * rowsPerPage;
+  const indexOfFirstResult = indexOfLastResult - rowsPerPage;
+  const currentResultsPage = importResults ? importResults.slice(indexOfFirstResult, indexOfLastResult) : [];
+  const totalPages = importResults ? Math.ceil(importResults.length / rowsPerPage) : 0;
 
   return (
     <div className="App">
@@ -503,7 +514,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {importResults.map((po) => {
+                    {currentResultsPage.map((po) => {
                       const isExpanded = !!expandedPo[po.poNumber];
                       return (
                         <React.Fragment key={po.poNumber}>
@@ -581,6 +592,77 @@ function App() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {importResults && importResults.length > 0 && (
+                <div className="pagination-controls">
+                  <div className="pagination-info">
+                    Showing <strong>{Math.min(indexOfFirstResult + 1, importResults.length)}</strong> to{' '}
+                    <strong>{Math.min(indexOfLastResult, importResults.length)}</strong> of{' '}
+                    <strong>{importResults.length}</strong> entries
+                  </div>
+                  
+                  <div className="pagination-actions">
+                    <div className="rows-per-page">
+                      <span className="rows-label">Rows per page:</span>
+                      <select
+                        className="rows-select"
+                        value={rowsPerPage}
+                        onChange={(e) => {
+                          setRowsPerPage(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                      >
+                        {[5, 10, 25, 50, 100].map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="pagination-buttons">
+                      <button
+                        className="btn-pagination"
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        title="First Page"
+                      >
+                        &laquo;
+                      </button>
+                      <button
+                        className="btn-pagination"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        title="Previous Page"
+                      >
+                        &lsaquo;
+                      </button>
+                      
+                      <span className="page-indicator">
+                        Page <strong>{currentPage}</strong> of <strong>{totalPages || 1}</strong>
+                      </span>
+
+                      <button
+                        className="btn-pagination"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        title="Next Page"
+                      >
+                        &rsaquo;
+                      </button>
+                      <button
+                        className="btn-pagination"
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        title="Last Page"
+                      >
+                        &raquo;
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -1,4 +1,51 @@
 const fs = require('fs');
+const path = require('path');
+const xlsx = require('xlsx');
+
+let conditionTypeMap = null;
+
+/**
+ * Loads the mapping of condition types to descriptive names from condition_types_Desc_MM.xlsx
+ */
+function loadConditionTypeMap() {
+    if (conditionTypeMap) return conditionTypeMap;
+    
+    conditionTypeMap = {};
+    try {
+        const filePath = path.resolve(__dirname, '..', 'condition_types_Desc_MM.xlsx');
+        if (fs.existsSync(filePath)) {
+            const workbook = xlsx.readFile(filePath);
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+            
+            // Row 0 is empty, Row 1 is headers [ 'Application', 'Condition Type', 'Access sequence', 'Name' ]
+            for (let i = 2; i < rawRows.length; i++) {
+                const row = rawRows[i];
+                if (row && row[1] && row[3]) {
+                    const condType = String(row[1]).trim().toUpperCase();
+                    const name = String(row[3]).trim();
+                    conditionTypeMap[condType] = name;
+                }
+            }
+            console.log(`Loaded ${Object.keys(conditionTypeMap).length} condition types from condition_types_Desc_MM.xlsx`);
+        } else {
+            console.warn(`Condition types Excel file not found at ${filePath}`);
+        }
+    } catch (err) {
+        console.error('Error loading condition types mapping:', err);
+    }
+    return conditionTypeMap;
+}
+
+/**
+ * Extract condition code (alphanumeric prefix) from column name
+ */
+function getConditionCode(str) {
+    if (!str) return '';
+    const match = String(str).trim().match(/^([a-z0-9%]+)/i);
+    return match ? match[1].toUpperCase() : '';
+}
 
 /**
  * Robustly retrieve a value from an excel row object using case-insensitive and whitespace-stripped key matching.
@@ -181,6 +228,7 @@ function getStockItemName(material, shortText) {
  * Generate Tally XML for a grouped PO
  */
 function generateTallyXML(poGroup, vendorMap = {}) {
+    const condMap = loadConditionTypeMap();
     const firstRow = poGroup.items[0];
     const poNumber = escapeXML(String(getRowValue(firstRow, 'Purchasing Document')).split('.')[0].trim());
     const docType = escapeXML(String(getRowValue(firstRow, 'PO - Doc Type') || 'ZSPR').trim());
@@ -365,7 +413,11 @@ function generateTallyXML(poGroup, vendorMap = {}) {
         
         if (Math.abs(colSum) > 0.001) {
             const exactKey = getExactKey(firstRow, col);
-            const normalizedName = escapeXML(exactKey.toString().replace(/\s+/g, ' ').trim());
+            const condCode = getConditionCode(col);
+            const mappedName = condMap[condCode];
+            
+            const finalLedgerName = mappedName ? mappedName : exactKey.toString().replace(/\s+/g, ' ').trim();
+            const normalizedName = escapeXML(finalLedgerName);
             const cleanColName = col.toLowerCase().replace(/\s/g, '');
             
             if (docType === 'ZCOL' && cleanColName !== 'jexs' && cleanColName !== 'navs') {
@@ -397,7 +449,7 @@ function generateTallyXML(poGroup, vendorMap = {}) {
                     
                     const escAmount = colSum.toFixed(2);
                     const escVendor = escapeXML(vendorString);
-                    const escColName = escapeXML(exactKey.toString().replace(/\s+/g, ' ').trim());
+                    const escColName = normalizedName;
                     
                     const slotXml = `      <UDF:${slot.inr}.LIST DESC="\`${slot.key}Inr\`" ISLIST="YES" TYPE="Amount" INDEX="${slot.idxInr}">
        <UDF:${slot.inr} DESC="\`${slot.key}Inr\`">${escAmount}</UDF:${slot.inr}>
