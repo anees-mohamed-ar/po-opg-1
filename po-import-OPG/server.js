@@ -5,11 +5,11 @@ const xlsx = require('xlsx');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
-const { generateTallyXML, getRowValue } = require('./tallyXMLBuilder');
+const { generateTallyXML, generateGRNTallyXML, generatePurchaseTallyXML, getRowValue, loadPOMaster } = require('./tallyXMLBuilder');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-const TALLY_URL = process.env.TALLY_URL || 'http://localhost:9000';
+const PORT = process.env.PORT || 5001;
+const TALLY_URL = process.env.TALLY_URL || 'http://localhost:9321';
 
 app.use(cors());
 app.use(express.json());
@@ -37,6 +37,45 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', tallyUrl: TALLY_URL });
 });
 
+app.get('/api/po-xml', (req, res) => {
+    try {
+        const reqFile = req.query.file || 'Purchase Order_4600001048.xml';
+        // Prevent path traversal
+        const safeFile = path.basename(reqFile);
+        const filePath = path.join(__dirname, '../', safeFile);
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: `XML file not found: ${safeFile}` });
+        }
+        let content = fs.readFileSync(filePath, 'utf16le');
+        if (!content.trim().startsWith('<')) {
+            content = fs.readFileSync(filePath, 'utf8');
+        }
+        // Sanitize invalid XML control character references like &#4;
+        content = content.replace(/&#\d+;/g, '');
+        res.type('application/xml').send(content);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to read XML file', details: err.message });
+    }
+});
+
+app.get('/api/daybook-xml', (req, res) => {
+    try {
+        const filePath = path.join(__dirname, '../DayBook.xml');
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'DayBook XML file not found' });
+        }
+        let content = fs.readFileSync(filePath, 'utf16le');
+        if (!content.trim().startsWith('<')) {
+            content = fs.readFileSync(filePath, 'utf8');
+        }
+        // Sanitize invalid XML control character references like &#4;
+        content = content.replace(/&#\d+;/g, '');
+        res.type('application/xml').send(content);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to read DayBook XML file', details: err.message });
+    }
+});
+
 let globalVendorMap = {};
 
 /**
@@ -50,108 +89,377 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     const filePath = req.file.path;
     try {
+        const importType = String(req.query.importType || req.body.importType || 'po').trim().toLowerCase();
+        const isGRN = importType === 'grn';
+        const isPurchase = importType === 'purchase';
+        const isStockJournal = importType === 'stock_journal';
+
         // Read the uploaded excel sheet
         const workbook = xlsx.readFile(filePath);
-        
-        // Find a sheet with 'detail' in the name
+
+        // Find a sheet with 'detail', 'sheet1', 'sheet', or 'main' in the name
         let detailSheetName = null;
         for (const name of workbook.SheetNames) {
-            if (name.toLowerCase().includes('detail')) {
+            const lowerName = name.toLowerCase();
+            if (lowerName.includes('detail') || lowerName.includes('sheet1') || lowerName.includes('sheet') || lowerName.includes('main')) {
                 detailSheetName = name;
                 break;
             }
         }
 
+        if (!detailSheetName && workbook.SheetNames.length > 0) {
+            detailSheetName = workbook.SheetNames[0];
+        }
+
         if (!detailSheetName) {
             cleanupFile(filePath);
-            return res.status(400).json({ 
-                error: 'Could not find a sheet containing "detail" in its name.',
+            return res.status(400).json({
+                error: 'Could not find a valid sheet in the workbook.',
                 availableSheets: workbook.SheetNames
             });
         }
 
         const sheet = workbook.Sheets[detailSheetName];
-        // Parse sheet to JSON objects
-        const rawRows = xlsx.utils.sheet_to_json(sheet);
+        
+        // Parse sheet to 2D array first to dynamically locate the header row
+        const rawGrid = xlsx.utils.sheet_to_json(sheet, { header: 1 });
         cleanupFile(filePath);
 
-        // Build global vendor map
-        globalVendorMap = {};
-        rawRows.forEach(row => {
-            const vCode = getRowValue(row, 'Vendor');
-            const vName = getRowValue(row, 'Vendor Name');
-            if (vCode !== undefined && vCode !== null && vName !== undefined && vName !== null) {
-                const cleanCode = String(vCode).split('.')[0].trim();
-                globalVendorMap[cleanCode] = String(vName).trim();
-            }
-        });
-
-        // Group rows by 'Purchasing Document' (filtering out empty/invalid rows)
-        const groups = {};
-        rawRows.forEach(row => {
-            // Skip rows marked with Deletion Indicator 'L'
-            const delInd = getRowValue(row, 'Deletion Indicator');
-            if (delInd && String(delInd).trim().toUpperCase() === 'L') {
-                return;
-            }
-
-            const poNum = row['Purchasing Document'];
-            if (poNum !== undefined && poNum !== null && String(poNum).trim() !== '') {
-                const poKey = String(poNum).split('.')[0].trim();
-                if (!groups[poKey]) {
-                    groups[poKey] = {
-                        poNumber: poKey,
-                        items: []
-                    };
+        // Find the index of the row containing the actual column headers
+        let headerRowIndex = -1;
+        for (let i = 0; i < Math.min(rawGrid.length, 50); i++) {
+            const row = rawGrid[i];
+            if (row && Array.isArray(row)) {
+                const hasHeader = row.some(cell => {
+                    const str = String(cell || '').trim();
+                    return str === 'Purchasing Document' || 
+                           str === 'Document Number' || 
+                           str === 'Invoice No' || 
+                           str === 'Invoice Number' || 
+                           str === 'Material Document' ||
+                           str === 'Invoicing Party' ||
+                           str === 'Vendor';
+                });
+                if (hasHeader) {
+                    headerRowIndex = i;
+                    break;
                 }
-                groups[poKey].items.push(row);
             }
-        });
-
-        const poList = Object.values(groups).map(poGroup => {
-            const firstRow = poGroup.items[0];
-            const docType = String(getRowValue(firstRow, 'PO - Doc Type') || 'ZSPR').trim();
-            const vendorName = String(getRowValue(firstRow, 'Vendor Name') || '').trim();
-            return {
-                poNumber: poGroup.poNumber,
-                docType,
-                vendorName,
-                itemCount: poGroup.items.length,
-                items: poGroup.items
-            };
-        });
-
-        if (poList.length === 0) {
-            return res.status(400).json({ error: 'No valid purchase orders found in the sheet.' });
         }
 
-        return res.json({
-            message: `Excel file processed successfully. Found ${poList.length} Purchase Orders.`,
-            poList
-        });
+        if (headerRowIndex === -1) {
+            headerRowIndex = 0; // Fallback
+        }
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Transfer-Encoding', 'chunked');
+        res.write(JSON.stringify({ type: 'progress', message: 'Starting row extraction...', rowsParsed: 0, totalRows: rawGrid.length }) + '\n');
+
+        // Convert subsequent rows into objects using the detected headers
+        const headers = rawGrid[headerRowIndex].map(h => String(h || '').trim());
+        const rawRows = [];
+        let rowIndex = headerRowIndex + 1;
+        const totalRows = rawGrid.length;
+
+        function processBatch() {
+            const batchSize = 2500;
+            const endIdx = Math.min(rowIndex + batchSize, totalRows);
+            for (; rowIndex < endIdx; rowIndex++) {
+                const row = rawGrid[rowIndex];
+                if (!row || row.length === 0) continue;
+                
+                const obj = {};
+                headers.forEach((header, colIdx) => {
+                    if (header) {
+                        const newVal = row[colIdx];
+                        const hasCurrent = obj[header] !== undefined && obj[header] !== null && String(obj[header]).trim() !== '';
+                        const hasNew = newVal !== undefined && newVal !== null && String(newVal).trim() !== '';
+                        if (hasCurrent && !hasNew) {
+                            // Keep current populated value
+                        } else {
+                            obj[header] = newVal;
+                        }
+                    }
+                });
+                rawRows.push(obj);
+            }
+
+            res.write(JSON.stringify({ 
+                type: 'progress', 
+                message: `Parsed ${rowIndex - (headerRowIndex + 1)} of ${totalRows - (headerRowIndex + 1)} rows`, 
+                rowsParsed: rowIndex - (headerRowIndex + 1), 
+                totalRows: totalRows - (headerRowIndex + 1) 
+            }) + '\n');
+
+            if (rowIndex < totalRows) {
+                setImmediate(processBatch);
+            } else {
+                finalizeUpload();
+            }
+        }
+
+        function finalizeUpload() {
+            // Build global vendor map (for PO only)
+            if (!isGRN && !isPurchase && !isStockJournal) {
+                globalVendorMap = {};
+                rawRows.forEach(row => {
+                    const vCode = getRowValue(row, 'Vendor');
+                    const vName = getRowValue(row, 'Vendor Name');
+                    if (vCode !== undefined && vCode !== null && vName !== undefined && vName !== null) {
+                        const cleanCode = String(vCode).split('.')[0].trim();
+                        globalVendorMap[cleanCode] = String(vName).trim();
+                    }
+                });
+            }
+
+            // Filter entries if applicable
+            let filteredRows = rawRows;
+            if (isGRN) {
+                filteredRows = rawRows.filter(row => {
+                    const eventType = String(getRowValue(row, 'Trans./Event Type') || '').trim().toUpperCase();
+                    if (eventType === 'WE') {
+                        const vendorVal = getRowValue(row, 'Vendor');
+                        if (vendorVal === undefined || vendorVal === null || String(vendorVal).trim() === '') return false;
+
+                        const poType = String(getRowValue(row, 'Purchase Order type') || '').trim().toUpperCase();
+                        if (poType === 'ZSTO') return false;
+
+                        return true;
+                    }
+                    return false;
+                });
+            } else if (isStockJournal) {
+                filteredRows = rawRows.filter(row => {
+                    const eventType = String(getRowValue(row, 'Trans./Event Type') || getRowValue(row, 'Trans./Event TypeA') || '').trim().toUpperCase();
+                    if (eventType === 'WA') {
+                        const plant = getRowValue(row, 'Receiving Plant') || getRowValue(row, 'Plant');
+                        if (plant === undefined || plant === null || String(plant).trim() === '') return false;
+                        return true;
+                    }
+                    return false;
+                });
+            }
+
+            // Group rows by 'Material Document', 'Document Number' / 'Invoice No', or 'Purchasing Document'
+            const groups = {};
+            filteredRows.forEach(row => {
+                let groupNum;
+                if (isGRN || isStockJournal) {
+                    groupNum = getRowValue(row, 'Material Document') || getRowValue(row, 'GRN Number') || getRowValue(row, 'Purchasing Document');
+                } else if (isPurchase) {
+                    groupNum = getRowValue(row, 'Document Number') || getRowValue(row, 'Invoice No') || getRowValue(row, 'Invoice Number');
+                } else {
+                    groupNum = getRowValue(row, 'Purchasing Document') || getRowValue(row, 'PO Number') || getRowValue(row, 'Document Number');
+                }
+
+                if (groupNum !== undefined && groupNum !== null && String(groupNum).trim() !== '') {
+                    const groupKey = String(groupNum).split('.')[0].trim();
+                    if (groupKey && groupKey.toUpperCase() !== 'X' && groupKey.toLowerCase() !== 'undefined' && groupKey.toLowerCase() !== 'null') {
+                        if (!groups[groupKey]) {
+                            groups[groupKey] = {
+                                poNumber: groupKey,
+                                items: []
+                            };
+                        }
+                        groups[groupKey].items.push(row);
+                    }
+                }
+            });
+
+            const ignoredPurchaseInvoices = [];
+
+            const poList = [];
+            Object.values(groups).forEach(poGroup => {
+                const firstRow = poGroup.items[0];
+                let docType = 'ZSPR';
+                let vendorName = '';
+                if (isStockJournal) {
+                    docType = 'WA';
+                    const recPlant = String(getRowValue(firstRow, 'Receiving Plant') || getRowValue(firstRow, 'Plant') || '').trim();
+                    vendorName = recPlant ? `Stock Transfer (${recPlant})` : 'Stock Transfer';
+                } else if (isGRN) {
+                    docType = String(getRowValue(firstRow, 'Trans./Event Type') || 'GRN').trim();
+                    vendorName = String(getRowValue(firstRow, 'Vendor Description') || '').trim();
+                } else if (isPurchase) {
+                    const rawDocType = String(
+                        getRowValue(firstRow, 'Purchasing Doc Type') ||
+                        getRowValue(firstRow, 'Purchasing Doc. Type') ||
+                        getRowValue(firstRow, 'PO - Doc Type') ||
+                        getRowValue(firstRow, 'Doc Type') ||
+                        ''
+                    ).trim();
+
+                    if (rawDocType) {
+                        docType = rawDocType;
+                    } else {
+                        const poNumber = String(getRowValue(firstRow, 'Purchasing Document') || getRowValue(firstRow, 'Purchase Order') || '').split('.')[0].trim();
+                        const poMaster = loadPOMaster();
+                        if (poNumber && poMaster[poNumber]) {
+                            docType = poMaster[poNumber];
+                        } else {
+                            docType = 'ZSPR';
+                        }
+                    }
+
+                    const rawParty = getRowValue(firstRow, 'Invoicing Party') || getRowValue(firstRow, 'Vendor');
+                    const rawVendorName = getRowValue(firstRow, 'Vendor Name') || getRowValue(firstRow, 'Vendor Description');
+                    vendorName = rawVendorName ? String(rawVendorName).trim() : (rawParty ? String(rawParty).split('.')[0].trim() : 'Unknown Vendor');
+                } else {
+                    docType = String(getRowValue(firstRow, 'Doc Type') || getRowValue(firstRow, 'PO - Doc Type') || getRowValue(firstRow, 'Document Type') || 'ZSPR').trim();
+                    vendorName = String(getRowValue(firstRow, 'Vendor Name') || '').trim();
+                }
+
+                /*
+                if (isPurchase) {
+                    // Check if any active stock line item (where Condition Type is empty) is missing Reference Document / GRN tracking number
+                    const hasMissingRefDoc = poGroup.items.some(item => {
+                        const delInd = getRowValue(item, 'Deletion Indicator');
+                        if (delInd && String(delInd).trim().toUpperCase() === 'L') return false;
+                        
+                        // Ignore charge / fee rows (rows that have a Condition Type value)
+                        const condType = getRowValue(item, 'Condition Type');
+                        if (condType && String(condType).trim() !== '') return false;
+
+                        const rawRefDoc = getRowValue(item, 'Reference Document') || getRowValue(item, 'Reference Document Item') || getRowValue(item, 'Ref Document') || getRowValue(item, 'GRN Number') || getRowValue(item, 'GRN');
+                        if (rawRefDoc === undefined || rawRefDoc === null) return true;
+                        const strVal = String(rawRefDoc).trim().toUpperCase();
+                        return strVal === '' || strVal === '#N/A' || strVal === '#N/A!' || strVal === 'N/A' || strVal === 'NULL' || strVal === 'UNDEFINED';
+                    });
+
+                    if (hasMissingRefDoc) {
+                        ignoredPurchaseInvoices.push({
+                            poNumber: poGroup.poNumber,
+                            docType,
+                            vendorName,
+                            itemCount: poGroup.items.length,
+                            items: poGroup.items,
+                            reason: 'Line item missing Reference Document (GRN Tracking Number)'
+                        });
+                        return; // Do not include in poList
+                    }
+                }
+                */
+
+                poList.push({
+                    poNumber: poGroup.poNumber,
+                    docType,
+                    vendorName,
+                    itemCount: poGroup.items.length,
+                    items: poGroup.items
+                });
+            });
+
+            if (poList.length === 0) {
+                const label = isStockJournal ? 'Stock Journal' : (isGRN ? 'GRN' : (isPurchase ? 'Purchase Invoice' : 'purchase order'));
+                res.write(JSON.stringify({ type: 'error', error: `No valid ${label} entries found in the sheet.` }) + '\n');
+                return res.end();
+            }
+
+            const label = isStockJournal ? 'Stock Journal' : (isGRN ? 'GRN' : (isPurchase ? 'Purchase Invoice' : 'Purchase Order'));
+            res.write(JSON.stringify({
+                type: 'result',
+                message: `Excel file processed successfully. Found ${poList.length} ${label} records.${ignoredPurchaseInvoices.length > 0 ? ` Ignored ${ignoredPurchaseInvoices.length} invoices with missing Reference Document.` : ''}`,
+                poList,
+                ignoredPurchaseInvoices
+            }) + '\n');
+            res.end();
+        }
+
+        // Start processing batch
+        processBatch();
 
     } catch (error) {
         console.error('Error processing Excel file:', error);
         cleanupFile(filePath);
-        return res.status(500).json({ error: 'Internal server error while processing sheet', details: error.message });
+        if (!res.headersSent) {
+            return res.status(500).json({ error: 'Internal server error while processing sheet', details: error.message });
+        } else {
+            res.write(JSON.stringify({ type: 'error', error: error.message }) + '\n');
+            return res.end();
+        }
     }
 });
 
 /**
  * POST /api/import
- * Takes selected Purchase Orders, generates XML, and pushes to Tally.
+ * Takes selected Purchase Orders or GRNs, generates XML, and pushes to Tally.
  */
+function parseTallyResponse(xmlStr) {
+    if (!xmlStr || typeof xmlStr !== 'string') {
+        return { created: 0, altered: 0, errors: 0, exceptions: 0, lineError: '', isSuccess: false };
+    }
+    const getVal = (tag) => {
+        const match = xmlStr.match(new RegExp(`<${tag}>(.*?)</${tag}>`, 'i'));
+        return match ? match[1].trim() : '';
+    };
+
+    const created = parseInt(getVal('CREATED') || '0', 10);
+    const rawAltered = parseInt(getVal('ALTERED') || '0', 10);
+    const altered = Math.floor(rawAltered / 2);
+    const errors = parseInt(getVal('ERRORS') || '0', 10);
+    const exceptions = parseInt(getVal('EXCEPTIONS') || '0', 10);
+    const lineError = getVal('LINEERROR');
+
+    const hasError = errors > 0 || exceptions > 0 || lineError !== '';
+    const isSuccess = (created > 0 || rawAltered > 0) && !hasError;
+
+    return {
+        created,
+        altered,
+        errors,
+        exceptions,
+        lineError,
+        isSuccess
+    };
+}
+
 app.post('/api/import', async (req, res) => {
-    const { selectedPOs } = req.body;
+    const { selectedPOs, importType, skipBlankMaterial } = req.body;
     if (!selectedPOs || !Array.isArray(selectedPOs) || selectedPOs.length === 0) {
-        return res.status(400).json({ error: 'No purchase orders selected for import' });
+        return res.status(400).json({ error: 'No records selected for import' });
     }
 
+    const isGRN = importType === 'grn';
+    const isPurchase = importType === 'purchase';
+    const isStockJournal = importType === 'stock_journal';
     const results = [];
     try {
         for (const poGroup of selectedPOs) {
-            const xmlPayload = generateTallyXML(poGroup, globalVendorMap);
+            if (skipBlankMaterial) {
+                poGroup.items = poGroup.items.filter(item => {
+                    const mat = getRowValue(item, 'Material');
+                    return mat !== undefined && mat !== null && String(mat).trim() !== '';
+                });
+            }
+
+            const activeItems = poGroup.items.filter(item => {
+                const delInd = getRowValue(item, 'Deletion Indicator');
+                return !(delInd && String(delInd).trim().toUpperCase() === 'L');
+            });
+
+            if (activeItems.length === 0) {
+                results.push({
+                    poNumber: poGroup.poNumber,
+                    vendorName: poGroup.vendorName || (poGroup.items[0] ? (isStockJournal ? 'Stock Transfer' : (isGRN ? poGroup.items[0]['Vendor Description'] : (isPurchase ? poGroup.items[0]['Invoicing Party'] : poGroup.items[0]['Vendor Name']))) : ''),
+                    itemCount: 0,
+                    status: 'skipped',
+                    tallyResponse: `Skipped - Record has only deleted items (Deletion Indicator L)`,
+                    tallyParsed: null,
+                    error: null,
+                    xmlGenerated: ''
+                });
+                continue;
+            }
+
+            const xmlPayload = isStockJournal
+                ? generateStockJournalTallyXML(poGroup)
+                : (isGRN
+                    ? generateGRNTallyXML(poGroup)
+                    : (isPurchase
+                        ? generatePurchaseTallyXML(poGroup, globalVendorMap)
+                        : generateTallyXML(poGroup, globalVendorMap)));
             let tallyResponse = null;
+            let tallyParsed = null;
             let status = 'pending';
             let errorMsg = null;
 
@@ -164,34 +472,110 @@ app.post('/api/import', async (req, res) => {
                     timeout: 5000 // 5 seconds timeout
                 });
                 tallyResponse = response.data;
-                status = 'success';
+                tallyParsed = parseTallyResponse(tallyResponse);
+
+                if (tallyParsed.exceptions > 0 || tallyParsed.errors > 0 || !tallyParsed.isSuccess) {
+                    status = 'failed';
+                    errorMsg = tallyParsed.lineError || `Tally import exception: exceptions=${tallyParsed.exceptions}, errors=${tallyParsed.errors}`;
+                } else {
+                    status = 'success';
+                }
             } catch (err) {
                 status = 'failed';
                 errorMsg = err.message;
                 if (err.response && err.response.data) {
                     tallyResponse = String(err.response.data);
+                    tallyParsed = parseTallyResponse(tallyResponse);
+                    if (tallyParsed.lineError) {
+                        errorMsg = `${err.message} - ${tallyParsed.lineError}`;
+                    }
                 }
             }
 
             results.push({
                 poNumber: poGroup.poNumber,
-                vendorName: poGroup.vendorName || (poGroup.items[0] ? poGroup.items[0]['Vendor Name'] : ''),
-                itemCount: poGroup.items.length,
+                vendorName: poGroup.vendorName || (poGroup.items[0] ? (isGRN ? poGroup.items[0]['Vendor Description'] : (isPurchase ? poGroup.items[0]['Invoicing Party'] : poGroup.items[0]['Vendor Name'])) : ''),
+                itemCount: activeItems.length,
                 status,
                 tallyResponse,
+                tallyParsed,
                 error: errorMsg,
                 xmlGenerated: xmlPayload
             });
         }
 
         return res.json({
-            message: `Processed ${results.length} Purchase Orders`,
+            message: `Processed ${results.length} records`,
             results
         });
 
     } catch (error) {
         console.error('Error processing import:', error);
         return res.status(500).json({ error: 'Internal server error during import', details: error.message });
+    }
+});
+
+app.post('/api/fetch-from-tally', async (req, res) => {
+    try {
+        const { fromDate, toDate } = req.body;
+        if (!fromDate || !toDate) {
+            return res.status(400).json({ error: 'fromDate and toDate are required.' });
+        }
+
+        // Build the XML request payload for exporting Voucher Register from Tally
+        const xmlRequest = `
+<ENVELOPE>
+    <HEADER>
+        <VERSION>1</VERSION>
+        <TALLYREQUEST>Export</TALLYREQUEST>
+        <TYPE>Data</TYPE>
+        <ID>VOUCHER REGISTER</ID>
+    </HEADER>
+    <BODY>
+        <DESC>
+            <STATICVARIABLES>
+                <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+                <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+                <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+            </STATICVARIABLES>
+        </DESC>
+    </BODY>
+</ENVELOPE>
+`;
+
+        console.log(`Sending XML request to Tally (${TALLY_URL}):`, xmlRequest);
+        const response = await axios.post(TALLY_URL, xmlRequest, {
+            headers: {
+                'Content-Type': 'application/xml',
+            },
+            timeout: 60000 // Tally reports can be large, allow 60 seconds timeout
+        });
+
+        let content = response.data;
+        // Clean up any invalid control character references like &#4;
+        if (typeof content === 'string') {
+            content = content.replace(/&#\d+;/g, '');
+        }
+
+        res.type('application/xml').send(content);
+    } catch (err) {
+        console.error('Error fetching data from Tally:', err.message);
+        res.status(500).json({ 
+            error: 'Failed to fetch data from Tally server.', 
+            details: err.message,
+            tallyUrl: TALLY_URL 
+        });
+    }
+});
+
+app.get('/api/xml-files', (req, res) => {
+    try {
+        const parentPath = path.join(__dirname, '../');
+        const files = fs.readdirSync(parentPath);
+        const xmlFiles = files.filter(f => f.toLowerCase().endsWith('.xml'));
+        res.json({ xmlFiles });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to list XML files', details: err.message });
     }
 });
 

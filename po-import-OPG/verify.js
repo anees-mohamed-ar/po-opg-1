@@ -24,11 +24,6 @@ try {
     // Group by Purchasing Document
     const groups = {};
     rawRows.forEach(row => {
-        // Skip deleted rows
-        const delInd = getRowValue(row, 'Deletion Indicator');
-        if (delInd && String(delInd).trim().toUpperCase() === 'L') {
-            return;
-        }
 
         const poNum = row['Purchasing Document'];
         if (poNum !== undefined && poNum !== null && String(poNum).trim() !== '') {

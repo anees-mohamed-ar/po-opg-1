@@ -1,0 +1,85 @@
+{
+    "success": true,
+    "data": {
+        "asset_id": 1,
+        "product_id": 1,
+        "name": "Laptop",
+        "description": "",
+        "serial_number": null,
+        "remarks": null,
+        "purchase_date": "2026-07-03T18:30:00.000Z",
+        "purchase_cost": "25000.00",
+        "total_value": "25000.00",
+        "cat_abbr": "ELCS",
+        "location_id": "ANDBH",
+        "status": "active",
+        "barcode_number": "IMT1ELCS1",
+        "useful_life": "3",
+        "shift": "1",
+        "salvage_value": "1250.00",
+        "brand": "",
+        "depreciable_asset": "yes",
+        "depreciation_method": "declining_balance",
+        "depreciation_rate": null,
+        "current_value_25": null,
+        "current_value": "24394.36",
+        "cv_as_FY": "24394.36",
+        "updated_by": "Admin",
+        "asset_code": "IMT1ELCS1",
+        "invoice_no": "132465",
+        "invoice_date": "2026-07-03T18:30:00.000Z",
+        "invoice_attachment": null,
+        "usage_start": "2026-07-03T18:30:00.000Z",
+        "hsn_code": "123456",
+        "guarantee": "no",
+        "guarantee_period": null,
+        "assigned_to": "Sales",
+        "department": "Sales",
+        "department_log": [
+            [
+                "Sales"
+            ]
+        ],
+        "department_dates": [
+            [
+                "2026-07-18"
+            ]
+        ],
+        "vendor_name": "Nishok",
+        "vendor_mobile": null,
+        "vendor_gstn": null,
+        "assign_status": "Assigned",
+        "assigned_log": [
+            [
+                "Sales"
+            ]
+        ],
+        "assigned_dates": [
+            [
+                "2026-07-18"
+            ]
+        ],
+        "is_sub_asset": "no",
+        "linked_to": null,
+        "linked_log": null,
+        "linked_dates": null,
+        "qr_code_svg": null,
+        "assets_images": null,
+        "po_no": "",
+        "grn_no": "",
+        "created_at": "2026-07-04T04:43:18.000Z",
+        "updated_at": "2026-07-18T12:00:02.000Z",
+        "send_to_tally": 1,
+        "voucher_no": "IMT_ACQUISITION_001",
+        "regional_approve": "approved",
+        "rejection_reason": null,
+        "product_name": "Laptop",
+        "location_name": "Andipalayam - Boat House",
+        "location_address": null,
+        "assigned_users": [],
+        "additional_charges": []
+    }
+}
+
+
+this is the detailed response for an asset from /assets/full-details/asset-code endpoint and it has all details show them all and 

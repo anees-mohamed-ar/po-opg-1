@@ -1,0 +1,1 @@
+formula for finding tax in the po for opg((taxable value/assessable value)*100)/2
