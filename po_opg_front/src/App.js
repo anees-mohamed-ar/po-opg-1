@@ -519,6 +519,50 @@ function App() {
       return '';
     };
 
+    if (importType === 'fi') {
+      return (
+        <div className="items-table-wrap">
+          <table className="items-table">
+            <thead>
+              <tr>
+                <th>Line Item</th>
+                <th>Debit/Credit</th>
+                <th>Vendor / G/L Account</th>
+                <th>Description</th>
+                <th>Amount in LC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, idx) => {
+                const lineItem = getV(item, 'Line item') || (idx + 1);
+                const ind = String(getV(item, 'Debit/Credit Ind.') || getV(item, 'Debit/Credit Ind') || '').trim().toUpperCase();
+                const isCredit = ind === 'H';
+                const vendor = String(getV(item, 'Vendor') || '').split('.')[0].trim();
+                const glAcc = String(getV(item, 'G/L Account') || getV(item, 'G/L Account_1') || '').split('.')[0].trim();
+                const party = vendor && vendor !== '0' ? `Vendor: ${vendor}` : `G/L: ${glAcc}`;
+                const desc = getV(item, 'Line Item Desc') || getV(item, 'Text') || '-';
+                const amt = getV(item, 'Amount in LC') || getV(item, 'Amount');
+
+                return (
+                  <tr key={idx} className="row-active">
+                    <td>{lineItem}</td>
+                    <td>
+                      <span className={isCredit ? 'badge-ignored' : 'badge-active'} style={{ fontWeight: 'bold' }}>
+                        {isCredit ? 'Credit (H)' : 'Debit (S)'}
+                      </span>
+                    </td>
+                    <td><code className="mat-code">{party}</code></td>
+                    <td className="desc-cell">{desc}</td>
+                    <td className="num-cell">{amt ? Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
     return (
       <div className="items-table-wrap">
         <table className="items-table">
@@ -792,17 +836,35 @@ function App() {
               >
                 Stock Journal
               </button>
+              <button 
+                className={`mode-btn ${importType === 'sales_order' ? 'active' : ''}`}
+                onClick={() => { setImportType('sales_order'); setFile(null); setError(null); }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: importType === 'sales_order' ? 'var(--accent)' : 'transparent', color: importType === 'sales_order' ? '#fff' : 'var(--text-2)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                Sales Order
+              </button>
+              <button 
+                className={`mode-btn ${importType === 'fi' ? 'active' : ''}`}
+                onClick={() => { setImportType('fi'); setFile(null); setError(null); }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: importType === 'fi' ? 'var(--accent)' : 'transparent', color: importType === 'fi' ? '#fff' : 'var(--text-2)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                Financial Entry (FI)
+              </button>
             </div>
             <div className="page-header">
               <h1 className="page-title">
                 {importType === 'po' ? 'Upload PO Spreadsheet' : 
                  (importType === 'purchase' ? 'Upload Purchase Invoice Spreadsheet' : 
-                  (importType === 'stock_journal' ? 'Upload Stock Journal Spreadsheet' : 'Upload GRN Spreadsheet'))}
+                  (importType === 'stock_journal' ? 'Upload Stock Journal Spreadsheet' : 
+                   (importType === 'sales_order' ? 'Upload Sales Order Spreadsheet' : 
+                    (importType === 'fi' ? 'Upload Financial Entry (FI) Spreadsheet' : 'Upload GRN Spreadsheet'))))}
               </h1>
               <p className="page-desc">
                 {importType === 'po' ? 'Drop your SAP Excel export to start importing purchase orders into Tally.' : 
                  (importType === 'purchase' ? 'Drop your Purchase Invoice Excel export to start importing Purchase Invoices into Tally.' : 
-                  (importType === 'stock_journal' ? 'Drop your SAP Excel export to start importing WA Stock Journal entries into Tally.' : 'Drop your SAP GRN Excel export to start importing Receipt Notes into Tally.'))}
+                  (importType === 'stock_journal' ? 'Drop your SAP Excel export to start importing WA Stock Journal entries into Tally.' : 
+                   (importType === 'sales_order' ? 'Drop your SAP Sales Order Excel export to start importing Sales Orders into Tally.' : 
+                    (importType === 'fi' ? 'Drop your FI Data Excel export to start importing Journal entries into Tally.' : 'Drop your SAP GRN Excel export to start importing Receipt Notes into Tally.'))))}
               </p>
             </div>
 
@@ -905,9 +967,19 @@ function App() {
           <div className="page-section">
             <div className="page-header">
               <div>
-                <h1 className="page-title">{importType === 'po' ? 'Select Purchase Orders' : (importType === 'purchase' ? 'Select Purchase Invoices' : (importType === 'stock_journal' ? 'Select Stock Journal (WA) Entries' : 'Select Goods Receipt Notes (GRN)'))}</h1>
+                <h1 className="page-title">
+                  {importType === 'po' ? 'Select Purchase Orders' : 
+                   (importType === 'purchase' ? 'Select Purchase Invoices' : 
+                    (importType === 'stock_journal' ? 'Select Stock Journal (WA) Entries' : 
+                     (importType === 'sales_order' ? 'Select Sales Orders' : 
+                      (importType === 'fi' ? 'Select Financial Entries (FI)' : 'Select Goods Receipt Notes (GRN)'))))}
+                </h1>
                 <p className="page-desc">
-                  {parsedPOs.length} {importType === 'po' ? 'POs' : (importType === 'purchase' ? 'Purchase Invoices' : (importType === 'stock_journal' ? 'Stock Journals' : 'GRNs'))} found · {selectedPos.size} selected
+                  {parsedPOs.length} {importType === 'po' ? 'POs' : 
+                                      (importType === 'purchase' ? 'Purchase Invoices' : 
+                                       (importType === 'stock_journal' ? 'Stock Journals' : 
+                                        (importType === 'sales_order' ? 'Sales Orders' : 
+                                         (importType === 'fi' ? 'FI Entries' : 'GRNs'))))} found · {selectedPos.size} selected
                   {importType === 'purchase' && ignoredInvoices.length > 0 && ` · ${ignoredInvoices.length} ignored (Missing GRN Tracking)`}
                 </p>
               </div>
@@ -946,7 +1018,9 @@ function App() {
                 <input
                   className="search-inp"
                   type="text"
-                  placeholder={importType === 'po' ? 'Search by PO number or vendor…' : (importType === 'purchase' ? 'Search by Invoice number or supplier…' : 'Search by GRN number or vendor…')}
+                  placeholder={importType === 'po' ? 'Search by PO number or vendor…' : 
+                               (importType === 'purchase' ? 'Search by Invoice number or supplier…' : 
+                                (importType === 'fi' ? 'Search by Document Number or party…' : 'Search by GRN number or vendor…'))}
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -996,25 +1070,24 @@ function App() {
             <div className="range-selector-bar" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--surface-2)', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid var(--border)', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-1)' }}>Select Range:</span>
               
-              {importType === 'grn' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--text-2)' }}>Category</span>
-                  <select 
-                    value={rangeCategory} 
-                    onChange={(e) => {
-                      setRangeCategory(e.target.value);
-                      const count = parsedPOs.filter(po => e.target.value === 'ALL' ? true : po.docType === e.target.value).length;
-                      setRangeFrom(1);
-                      setRangeTo(Math.min(100, count));
-                    }} 
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)' }}
-                  >
-                    <option value="ALL">All</option>
-                    <option value="WE">WE (GRN)</option>
-                    <option value="WA">WA (Internal Transfer)</option>
-                  </select>
-                </div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-2)' }}>Doc Type</span>
+                <select 
+                  value={rangeCategory} 
+                  onChange={(e) => {
+                    setRangeCategory(e.target.value);
+                    const count = parsedPOs.filter(po => e.target.value === 'ALL' ? true : po.docType === e.target.value).length;
+                    setRangeFrom(1);
+                    setRangeTo(Math.min(100, count));
+                  }} 
+                  style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)' }}
+                >
+                  <option value="ALL">ALL (All Doc Types)</option>
+                  {uniqueDocTypes.map(dt => (
+                    <option key={dt} value={dt}>{dt} ({docTypeCounts[dt]})</option>
+                  ))}
+                </select>
+              </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-2)' }}>From</span>
@@ -1198,7 +1271,15 @@ function App() {
 
             <div className="import-footer">
               <div className="import-footer-info">
-                <span className="sel-count-label">{selectedPos.size} of {parsedPOs.length} {importType === 'po' ? 'POs' : (importType === 'purchase' ? 'Purchase Invoices' : 'GRNs')} selected</span>
+                <span className="sel-count-label">
+                  {selectedPos.size} of {parsedPOs.length} {
+                    importType === 'po' ? 'POs' : 
+                    (importType === 'purchase' ? 'Purchase Invoices' : 
+                     (importType === 'stock_journal' ? 'Stock Journals' : 
+                      (importType === 'sales_order' ? 'Sales Orders' : 
+                       (importType === 'fi' ? 'FI Entries' : 'GRNs'))))
+                  } selected
+                </span>
               </div>
               <button
                 className="btn-primary btn-lg"
@@ -1213,7 +1294,13 @@ function App() {
                       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                       <polyline points="22 4 12 14.01 9 11.01" />
                     </svg>
-                    Import {selectedPos.size} {importType === 'po' ? 'PO' : (importType === 'purchase' ? 'Purchase Invoice' : 'GRN')}{selectedPos.size !== 1 ? 's' : ''} to Tally
+                    Import {selectedPos.size} {
+                      importType === 'po' ? 'PO' : 
+                      (importType === 'purchase' ? 'Purchase Invoice' : 
+                       (importType === 'stock_journal' ? 'Stock Journal' : 
+                        (importType === 'sales_order' ? 'Sales Order' : 
+                         (importType === 'fi' ? 'Financial Entry' : 'GRN'))))
+                    }{selectedPos.size !== 1 ? 's' : ''} to Tally
                   </>
                 )}
               </button>
@@ -1237,6 +1324,40 @@ function App() {
               </div>
               {!importing && (
                 <div style={{ display: 'flex', gap: '8px' }}>
+                  {failedCount > 0 && (
+                    <button 
+                      className="btn-secondary"
+                      onClick={() => {
+                        const failedList = importResults.filter(r => r.status === 'failed');
+                        const headers = ['Document Number / PO Number', 'Doc Type', 'Party / Vendor Name', 'Error Reason', 'Tally Line Error', 'Tally Raw Response'];
+                        const rows = failedList.map(r => [
+                          `"${r.poNumber || ''}"`,
+                          `"${r.docType || ''}"`,
+                          `"${(r.vendorName || '').replace(/"/g, '""')}"`,
+                          `"${(r.error || '').replace(/"/g, '""')}"`,
+                          `"${(r.tallyParsed?.lineError || '').replace(/"/g, '""')}"`,
+                          `"${(r.tallyResponse || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`
+                        ]);
+                        const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.setAttribute('download', `Failed_Import_Log_${importType}_${new Date().toISOString().slice(0,10)}.csv`);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      style={{ background: '#fef2f2', borderColor: '#fca5a5', color: '#dc2626', fontWeight: '600' }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      Download Failed Log ({failedCount})
+                    </button>
+                  )}
                   <button className="btn-secondary" onClick={handleBackToReselect}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                       <line x1="19" y1="12" x2="5" y2="12" />
@@ -1616,6 +1737,56 @@ function App() {
                 <div><span style={{ color: '#64748b' }}>Errors:</span> <strong style={{ color: totalErrors > 0 ? '#dc2626' : '#0f172a' }}>{totalErrors}</strong></div>
               </div>
             </div>
+
+            {failedCount > 0 && (
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  const failedList = importResults.filter(r => r.status === 'failed');
+                  const headers = ['Document Number / PO Number', 'Doc Type', 'Party / Vendor Name', 'Error Reason', 'Tally Line Error', 'Tally Raw Response'];
+                  const rows = failedList.map(r => [
+                    `"${r.poNumber || ''}"`,
+                    `"${r.docType || ''}"`,
+                    `"${(r.vendorName || '').replace(/"/g, '""')}"`,
+                    `"${(r.error || '').replace(/"/g, '""')}"`,
+                    `"${(r.tallyParsed?.lineError || '').replace(/"/g, '""')}"`,
+                    `"${(r.tallyResponse || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`
+                  ]);
+                  const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+                  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.setAttribute('download', `Failed_Import_Log_${importType}_${new Date().toISOString().slice(0,10)}.csv`);
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  border: '1px solid #fca5a5',
+                  background: '#fef2f2',
+                  color: '#dc2626',
+                  fontSize: '13px',
+                  marginBottom: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Download Failed Log CSV ({failedCount})
+              </button>
+            )}
 
             <button
               className="btn-primary"

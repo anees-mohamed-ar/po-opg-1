@@ -226,6 +226,50 @@ function formatDate(dateValue) {
 }
 
 /**
+ * Format date for ORDERDUEDATE tag with attributes (JD and P)
+ */
+function formatOrderDueDate(dateValue) {
+    let dt;
+    if (!dateValue) {
+        dt = new Date(2026, 3, 1);
+    } else if (typeof dateValue === 'number' || (typeof dateValue === 'string' && dateValue.trim() !== '' && !isNaN(dateValue) && !dateValue.includes('.'))) {
+        const serial = parseFloat(dateValue);
+        dt = new Date(Math.round((serial - 25569) * 86400 * 1000));
+    } else if (dateValue instanceof Date) {
+        dt = dateValue;
+    } else {
+        const str = String(dateValue).trim();
+        if (str.includes('.')) {
+            const parts = str.split('.');
+            if (parts.length === 3) {
+                dt = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            }
+        }
+        if (!dt || isNaN(dt.getTime())) {
+            const parsed = new Date(str);
+            if (!isNaN(parsed.getTime())) {
+                dt = parsed;
+            } else {
+                dt = new Date(2026, 3, 1);
+            }
+        }
+    }
+
+    // Tally Julian Date epoch: 1-Jan-1900 = 1
+    const epoch = new Date(1900, 0, 1);
+    const diffDays = Math.floor((dt.getTime() - epoch.getTime()) / (86400 * 1000));
+    const jd = diffDays + 1;
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = dt.getDate();
+    const month = months[dt.getMonth()];
+    const yearStr = String(dt.getFullYear()).slice(-2);
+    const formattedStr = `${day}-${month}-${yearStr}`;
+
+    return `<ORDERDUEDATE JD="${jd}" P="${formattedStr}">${formattedStr}</ORDERDUEDATE>`;
+}
+
+/**
  * Pad numbers with leading zeros (e.g. 10353 -> 0000010353)
  */
 function padVendor(vendorId) {
@@ -954,9 +998,9 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
     const firstRow = purchaseGroup.items[0];
 
     const rawVoucherNo = getRowValue(firstRow, 'Invoice No') ||
-                         getRowValue(firstRow, 'Invoice Number') ||
-                         getRowValue(firstRow, 'Document Number') ||
-                         '';
+        getRowValue(firstRow, 'Invoice Number') ||
+        getRowValue(firstRow, 'Document Number') ||
+        '';
     const voucherNumber = escapeXML(String(rawVoucherNo).split('.')[0].trim());
     const reference = escapeXML(String(getRowValue(firstRow, 'Reference')).trim());
     const docDateFormatted = formatDate(getRowValue(firstRow, 'Document Date') || getRowValue(firstRow, 'Posting Date'));
@@ -1830,7 +1874,7 @@ function generateGRNTallyXML(grnGroup) {
       <CONSIGNEESTATENAME>${cmpState}</CONSIGNEESTATENAME>
       <CONSIGNEECOUNTRYNAME>India</CONSIGNEECOUNTRYNAME>
       <BASICBASEPARTYNAME>${partyName}</BASICBASEPARTYNAME>
-      <NUMBERINGSTYLE>Auto Retain</NUMBERINGSTYLE>
+      <NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
       <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>
       <CSTFORMRECVTYPE>&#4; Not Applicable</CSTFORMRECVTYPE>
       <FBTPAYMENTTYPE>Default</FBTPAYMENTTYPE>
@@ -2460,6 +2504,502 @@ ${inventoryOutXML}
 </ENVELOPE>`;
 }
 
+function generateSalesOrderTallyXML(poGroup) {
+    const items = poGroup.items || [];
+    const firstRow = items[0] || {};
+
+    const rawSalesDoc = getRowValue(firstRow, 'Sales document') || poGroup.poNumber || '';
+    const voucherNumber = String(rawSalesDoc).split('.')[0].trim();
+
+    const salesDocType = String(getRowValue(firstRow, 'Sales Document Type') || getRowValue(firstRow, 'Sales Document Type Desc') || 'ZASH').trim();
+    const voucherType = `Sales Order ${salesDocType}`;
+
+    const rawParty = String(getRowValue(firstRow, 'Ship-to party') || getRowValue(firstRow, 'Party') || getRowValue(firstRow, 'Customer') || '').split('.')[0].trim();
+    const partyLedger = rawParty ? rawParty.padStart(10, '0') : '';
+
+    const rawDocDate = getRowValue(firstRow, 'Doc Date') || getRowValue(firstRow, 'Created on') || getRowValue(firstRow, 'Document Date');
+    const docDateFormatted = formatDate(rawDocDate);
+
+    let totalInventoryAmount = 0;
+    let totalTaxAmount = 0;
+
+    const inventoryEntriesXML = items.map(item => {
+        const materialCode = String(getRowValue(item, 'Material') || getRowValue(item, 'Material entered') || '').split('.')[0].trim();
+        const stockItemName = materialCode ? getStockItemName(materialCode) : '';
+
+        const itemDocDate = getRowValue(item, 'Doc Date') || getRowValue(item, 'Created on') || getRowValue(item, 'Document Date') || rawDocDate;
+        const itemOrderDueDateXML = formatOrderDueDate(itemDocDate);
+
+        const qtyVal = getRowValue(item, 'Order Quantity') || getRowValue(item, 'Quantity') || 0;
+        const qtyNum = parseFloat(String(qtyVal).trim()) || 0;
+        const uom = String(getRowValue(item, 'Base Unit of Measure') || getRowValue(item, 'Sales unit') || getRowValue(item, 'Unit of measure') || 'MT').trim();
+        const qtyFormatted = `${formatQuantity(qtyNum)} ${uom}`;
+
+        // 1. Dynamic base price determination: check ZASH, YBPR, zpro, ZPRS in order
+        const p1 = parseFloat(getRowValue(item, 'ZASH - Base Price') || 0) || 0;
+        const p2 = parseFloat(getRowValue(item, 'YBPR- Basic Price') || getRowValue(item, 'YBPR - Basic Price') || 0) || 0;
+        const p3 = parseFloat(getRowValue(item, 'zpro-base price') || getRowValue(item, 'zpro - base price') || 0) || 0;
+        const p4 = parseFloat(getRowValue(item, 'ZPRS - base price') || getRowValue(item, 'ZPRS - Base Price') || 0) || 0;
+
+        let basePrice = 0;
+        if (p1 !== 0) basePrice = p1;
+        else if (p2 !== 0) basePrice = p2;
+        else if (p3 !== 0) basePrice = p3;
+        else if (p4 !== 0) basePrice = p4;
+
+        // 2. Check additional component columns
+        const colYTRL = parseFloat(getRowValue(item, 'YTRL - Transmission') || 0) || 0;
+        const colCESS = parseFloat(getRowValue(item, 'CESS') || 0) || 0;
+        const colZASHQty = parseFloat(getRowValue(item, 'ZASH Qty * Base Price') || 0) || 0;
+        const colYBPRQty = parseFloat(getRowValue(item, 'YBPR - Qty * Base Price') || 0) || 0;
+        const colZProQty = parseFloat(getRowValue(item, 'zpro - Qty * BasePrice') || getRowValue(item, 'zpro - Qty * BasePrice ') || 0) || 0;
+        const colZREL = parseFloat(getRowValue(item, 'ZREL') || 0) || 0;
+        const colZOM2 = parseFloat(getRowValue(item, 'ZOM2 - Without Base amt') || getRowValue(item, 'ZOM2 - Without Base amt ') || 0) || 0;
+        const colJWTH = parseFloat(getRowValue(item, 'JWTH') || 0) || 0;
+
+        const sumAdditionalComponents = colYTRL + colCESS + colZASHQty + colYBPRQty + colZProQty + colZREL + colZOM2 + colJWTH;
+
+        let lineAmount = 0;
+        if (sumAdditionalComponents !== 0) {
+            lineAmount = sumAdditionalComponents;
+        } else {
+            lineAmount = basePrice * qtyNum;
+        }
+
+        totalInventoryAmount += lineAmount;
+
+        // Tax amount for this item
+        const itemTax = parseFloat(getRowValue(item, 'TAX amount') || getRowValue(item, 'TAX Amount') || 0) || 0;
+        totalTaxAmount += itemTax;
+
+        const computedRate = qtyNum > 0 ? (lineAmount / qtyNum) : basePrice;
+        const rateFormatted = `${computedRate.toFixed(2)}/${uom}`;
+        const amountFormatted = lineAmount.toFixed(2);
+
+        return `      <ALLINVENTORYENTRIES.LIST>
+       <STOCKITEMNAME>${escapeXML(stockItemName)}</STOCKITEMNAME>
+       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+       <ISAUTONEGATE>No</ISAUTONEGATE>
+       <ISCUSTOMSCLEARANCE>No</ISCUSTOMSCLEARANCE>
+       <ISTRACKCOMPONENT>No</ISTRACKCOMPONENT>
+       <ISTRACKPRODUCTION>No</ISTRACKPRODUCTION>
+       <ISPRIMARYITEM>No</ISPRIMARYITEM>
+       <ISSCRAP>No</ISSCRAP>
+       <RATE>${rateFormatted}</RATE>
+       <AMOUNT>${amountFormatted}</AMOUNT>
+       <ACTUALQTY>${qtyFormatted}</ACTUALQTY>
+       <BILLEDQTY>${qtyFormatted}</BILLEDQTY>
+       <BATCHALLOCATIONS.LIST>
+        <GODOWNNAME>Main Location</GODOWNNAME>
+        <BATCHNAME>Primary Batch</BATCHNAME>
+        <INDENTNO>&#4; Not Applicable</INDENTNO>
+        <ORDERNO>${voucherNumber}</ORDERNO>
+        <TRACKINGNUMBER>&#4; Not Applicable</TRACKINGNUMBER>
+        <DYNAMICCSTISCLEARED>No</DYNAMICCSTISCLEARED>
+        <AMOUNT>${amountFormatted}</AMOUNT>
+        <ACTUALQTY>${qtyFormatted}</ACTUALQTY>
+        <BILLEDQTY>${qtyFormatted}</BILLEDQTY>
+        ${itemOrderDueDateXML}
+        <ADDITIONALDETAILS.LIST>        </ADDITIONALDETAILS.LIST>
+        <VOUCHERCOMPONENTLIST.LIST>        </VOUCHERCOMPONENTLIST.LIST>
+       </BATCHALLOCATIONS.LIST>
+       <ACCOUNTINGALLOCATIONS.LIST>
+        <OLDAUDITENTRYIDS.LIST TYPE="Number">
+         <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+        </OLDAUDITENTRYIDS.LIST>
+        <LEDGERNAME>${escapeXML(voucherType)}</LEDGERNAME>
+        <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+        <LEDGERFROMITEM>No</LEDGERFROMITEM>
+        <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+        <ISPARTYLEDGER>No</ISPARTYLEDGER>
+        <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+        <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+        <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+        <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+        <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+        <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+        <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+        <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+        <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+        <AMOUNT>${amountFormatted}</AMOUNT>
+        <SERVICETAXDETAILS.LIST>        </SERVICETAXDETAILS.LIST>
+        <BANKALLOCATIONS.LIST>        </BANKALLOCATIONS.LIST>
+        <BILLALLOCATIONS.LIST>        </BILLALLOCATIONS.LIST>
+        <INTERESTCOLLECTION.LIST>        </INTERESTCOLLECTION.LIST>
+        <OLDAUDITENTRIES.LIST>        </OLDAUDITENTRIES.LIST>
+        <ACCOUNTAUDITENTRIES.LIST>        </ACCOUNTAUDITENTRIES.LIST>
+        <AUDITENTRIES.LIST>        </AUDITENTRIES.LIST>
+        <INPUTCRALLOCS.LIST>        </INPUTCRALLOCS.LIST>
+        <DUTYHEADDETAILS.LIST>        </DUTYHEADDETAILS.LIST>
+        <EXCISEDUTYHEADDETAILS.LIST>        </EXCISEDUTYHEADDETAILS.LIST>
+        <RATEDETAILS.LIST>        </RATEDETAILS.LIST>
+        <SUMMARYALLOCS.LIST>        </SUMMARYALLOCS.LIST>
+        <CENVATDUTYALLOCATIONS.LIST>        </CENVATDUTYALLOCATIONS.LIST>
+        <STPYMTDETAILS.LIST>        </STPYMTDETAILS.LIST>
+        <EXCISEPAYMENTALLOCATIONS.LIST>        </EXCISEPAYMENTALLOCATIONS.LIST>
+        <TAXBILLALLOCATIONS.LIST>        </TAXBILLALLOCATIONS.LIST>
+        <TAXOBJECTALLOCATIONS.LIST>        </TAXOBJECTALLOCATIONS.LIST>
+        <TDSEXPENSEALLOCATIONS.LIST>        </TDSEXPENSEALLOCATIONS.LIST>
+        <VATSTATUTORYDETAILS.LIST>        </VATSTATUTORYDETAILS.LIST>
+        <COSTTRACKALLOCATIONS.LIST>        </COSTTRACKALLOCATIONS.LIST>
+        <REFVOUCHERDETAILS.LIST>        </REFVOUCHERDETAILS.LIST>
+        <INVOICEWISEDETAILS.LIST>        </INVOICEWISEDETAILS.LIST>
+        <VATITCDETAILS.LIST>        </VATITCDETAILS.LIST>
+        <ADVANCETAXDETAILS.LIST>        </ADVANCETAXDETAILS.LIST>
+        <TAXTYPEALLOCATIONS.LIST>        </TAXTYPEALLOCATIONS.LIST>
+       </ACCOUNTINGALLOCATIONS.LIST>
+       <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+       <RATEDETAILS.LIST>       </RATEDETAILS.LIST>
+       <SUPPLEMENTARYDUTYHEADDETAILS.LIST>       </SUPPLEMENTARYDUTYHEADDETAILS.LIST>
+       <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+       <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+       <EXCISEALLOCATIONS.LIST>       </EXCISEALLOCATIONS.LIST>
+       <EXPENSEALLOCATIONS.LIST>       </EXPENSEALLOCATIONS.LIST>
+      </ALLINVENTORYENTRIES.LIST>`;
+    }).join('\n');
+
+    // Tax ledger calculations based on Destination region
+    const destRegion = String(getRowValue(firstRow, 'Destination region') || '').trim();
+    let taxLedgersXML = '';
+
+    if (totalTaxAmount > 0) {
+        if (destRegion === '33') {
+            const halfTax = totalTaxAmount / 2;
+            const halfTaxFormatted = halfTax.toFixed(2);
+            taxLedgersXML = `      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <LEDGERNAME>CGST</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>No</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${halfTaxFormatted}</AMOUNT>
+      </LEDGERENTRIES.LIST>
+      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <LEDGERNAME>SGST</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>No</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${halfTaxFormatted}</AMOUNT>
+      </LEDGERENTRIES.LIST>`;
+        } else {
+            const taxFormatted = totalTaxAmount.toFixed(2);
+            taxLedgersXML = `      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <LEDGERNAME>IGST</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>No</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${taxFormatted}</AMOUNT>
+      </LEDGERENTRIES.LIST>`;
+        }
+    }
+
+    const partyTotalAmount = totalInventoryAmount + totalTaxAmount;
+    const partyAmountFormatted = (-partyTotalAmount).toFixed(2);
+    const remoteId = `81f73e2b-a3c5-4ff2-a56f-49d15ff7c0f6-${voucherNumber.padStart(8, '0')}`;
+    const vchKey = `81f73e2b-a3c5-4ff2-a56f-49d15ff7c0f6-0000b125:${voucherNumber.padStart(8, '0')}`;
+
+    return `<ENVELOPE>
+ <HEADER>
+  <TALLYREQUEST>Import Data</TALLYREQUEST>
+ </HEADER>
+ <BODY>
+  <IMPORTDATA>
+   <REQUESTDESC>
+    <REPORTNAME>Vouchers</REPORTNAME>
+    <STATICVARIABLES>
+     <SVCURRENTCOMPANY>${escapeXML(COMPANY_NAME)}</SVCURRENTCOMPANY>
+    </STATICVARIABLES>
+   </REQUESTDESC>
+   <REQUESTDATA>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <VOUCHER REMOTEID="${remoteId}" VCHKEY="${vchKey}" VCHTYPE="${escapeXML(voucherType)}" ACTION="Create" OBJVIEW="Invoice Voucher View">
+      <OLDAUDITENTRYIDS.LIST TYPE="Number">
+       <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+      </OLDAUDITENTRYIDS.LIST>
+      <DATE>${docDateFormatted}</DATE>
+      <VCHSTATUSDATE>${docDateFormatted}</VCHSTATUSDATE>
+      <GUID>${remoteId}</GUID>
+      <PARTYNAME>${escapeXML(partyLedger)}</PARTYNAME>
+      <VOUCHERTYPENAME>${escapeXML(voucherType)}</VOUCHERTYPENAME>
+      <PARTYLEDGERNAME>${escapeXML(partyLedger)}</PARTYLEDGERNAME>
+      <VOUCHERNUMBER>${voucherNumber}</VOUCHERNUMBER>
+      <BASICBUYERNAME>${escapeXML(partyLedger)}</BASICBUYERNAME>
+      <REFERENCE>${voucherNumber}</REFERENCE>
+      <NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
+      <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+      <VCHSTATUSVOUCHERTYPE>${escapeXML(voucherType)}</VCHSTATUSVOUCHERTYPE>
+      <DIFFACTUALQTY>No</DIFFACTUALQTY>
+      <ISMSTFROMSYNC>No</ISMSTFROMSYNC>
+      <ISDELETED>No</ISDELETED>
+      <ASORIGINAL>No</ASORIGINAL>
+      <AUDITED>No</AUDITED>
+      <ISOPTIONAL>No</ISOPTIONAL>
+      <EFFECTIVEDATE>${docDateFormatted}</EFFECTIVEDATE>
+      <USETRACKINGNUMBER>No</USETRACKINGNUMBER>
+      <ISINVOICE>No</ISINVOICE>
+      <ISVATDUTYPAID>Yes</ISVATDUTYPAID>
+${inventoryEntriesXML}
+      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <LEDGERNAME>${escapeXML(partyLedger)}</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>Yes</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${partyAmountFormatted}</AMOUNT>
+      </LEDGERENTRIES.LIST>
+${taxLedgersXML}
+     </VOUCHER>
+    </TALLYMESSAGE>
+   </REQUESTDATA>
+  </IMPORTDATA>
+ </BODY>
+</ENVELOPE>`;
+}
+
+function generateFITallyXML(poGroup) {
+    if (!poGroup || !poGroup.items || poGroup.items.length === 0) {
+        throw new Error('No items in Financial Entry group');
+    }
+
+    const items = poGroup.items;
+    const firstRow = items[0];
+
+    const rawDocType = String(getRowValue(firstRow, 'Doc Type') || 'FI').trim();
+    const voucherTypeName = escapeXML(`Journal ${rawDocType}`);
+    const docNumber = String(poGroup.poNumber || getRowValue(firstRow, 'Document Number') || '').split('.')[0].trim();
+    // const guid = `81f73e2b-a3c5-4ff2-a56f-50f15ff7c0f6-${docNumber.padStart(8, '0')}-${rawDocType}`;
+    // const guid = `81f73e2b-a3c5-4ff2-a56f-57d15ff7c0f6-${docNumber.padStart(8, '0')}-${rawDocType}`;
+
+    const postingDateRaw = getRowValue(firstRow, 'Posting Date') || getRowValue(firstRow, 'Doc Date');
+    const dateFormatted = formatDate(postingDateRaw);
+
+    let partyLedger = '';
+    let partyAmount = 0;
+    const ledgerEntries = [];
+
+    items.forEach(row => {
+        const ind = String(getRowValue(row, 'Debit/Credit Ind.') || getRowValue(row, 'Debit/Credit Ind') || 'S').trim().toUpperCase();
+        const isCredit = ind === 'H';
+        const isDeemedPositive = isCredit ? 'No' : 'Yes'; // S = Debit (Yes), H = Credit (No)
+
+        const rawVendor = getRowValue(row, 'Vendor');
+        const cleanVendor = rawVendor !== undefined && rawVendor !== null ? String(rawVendor).split('.')[0].trim() : '';
+        const rawCustomer = getRowValue(row, 'Customer');
+        const cleanCustomer = rawCustomer !== undefined && rawCustomer !== null ? String(rawCustomer).split('.')[0].trim() : '';
+        const rawGL = getRowValue(row, 'G/L Account') || getRowValue(row, 'G/L Account_1');
+        const cleanGL = rawGL !== undefined && rawGL !== null ? String(rawGL).split('.')[0].trim() : '';
+
+        const accountType = String(getRowValue(row, 'Account Type') || '').trim().toUpperCase();
+        let ledgerName = '';
+        let isParty = false;
+
+        if (accountType === 'K' || (cleanVendor && cleanVendor !== '0' && !cleanGL)) {
+            // Vendor Entry
+            const paddedVendor = padVendor(cleanVendor);
+            const vendorName = getRowValue(row, 'Vendor Name') || getRowValue(row, 'Vendor Description') || '';
+            ledgerName = vendorName ? `${paddedVendor}-${String(vendorName).trim()}` : paddedVendor;
+            isParty = true;
+        } else if (accountType === 'D' || (cleanCustomer && cleanCustomer !== '0' && !cleanGL)) {
+            // Customer Entry
+            const paddedCustomer = padVendor(cleanCustomer);
+            const custName = getRowValue(row, 'Customer Name') || getRowValue(row, 'Customer Description') || getRowValue(row, 'GST Partner') || '';
+            ledgerName = custName ? `${paddedCustomer}-${String(custName).trim()}` : paddedCustomer;
+            isParty = true;
+        } else if (cleanGL) {
+            // G/L Account / Asset / Material Entry
+            const glName = getRowValue(row, 'G/L Account Description') || getRowValue(row, 'G/L Account Name') || '';
+            ledgerName = glName ? `${cleanGL}-${String(glName).trim()}` : cleanGL;
+            isParty = false;
+        } else {
+            ledgerName = 'Suspense Ledger';
+            isParty = false;
+        }
+
+        if (!partyLedger && isParty) {
+            partyLedger = ledgerName;
+        }
+
+        const amtVal = parseFloat(getRowValue(row, 'Amount in LC') || getRowValue(row, 'Amount') || 0) || 0;
+        // In Tally XML: Debit is negative (-), Credit is positive (+) in AMOUNT tag when ISDEEMEDPOSITIVE matches
+        const tallyAmountFormatted = isCredit ? amtVal.toFixed(2) : (-amtVal).toFixed(2);
+
+        if (isParty && isCredit) {
+            partyAmount = amtVal;
+        }
+
+        ledgerEntries.push({
+            ledgerName,
+            isDeemedPositive,
+            isPartyLedger: isParty ? 'Yes' : 'No',
+            amountFormatted: tallyAmountFormatted
+        });
+    });
+
+    if (!partyLedger && ledgerEntries.length > 0) {
+        partyLedger = ledgerEntries[0].ledgerName;
+    }
+
+    const ledgerEntriesXML = ledgerEntries.map(entry => `       <ALLLEDGERENTRIES.LIST>
+        <OLDAUDITENTRYIDS.LIST TYPE="Number">
+         <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+        </OLDAUDITENTRYIDS.LIST>
+        <LEDGERNAME>${escapeXML(entry.ledgerName)}</LEDGERNAME>
+        <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+        <ISDEEMEDPOSITIVE>${entry.isDeemedPositive}</ISDEEMEDPOSITIVE>
+        <LEDGERFROMITEM>No</LEDGERFROMITEM>
+        <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+        <ISPARTYLEDGER>${entry.isPartyLedger}</ISPARTYLEDGER>
+        <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+        <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+        <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+        <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+        <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+        <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+        <ISLASTDEEMEDPOSITIVE>${entry.isDeemedPositive}</ISLASTDEEMEDPOSITIVE>
+        <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+        <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+        <AMOUNT>${entry.amountFormatted}</AMOUNT>
+        <VATEXPAMOUNT>${entry.amountFormatted}</VATEXPAMOUNT>
+        <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>
+        <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>
+        <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>
+        <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>
+        <OLDAUDITENTRIES.LIST>       </OLDAUDITENTRIES.LIST>
+        <ACCOUNTAUDITENTRIES.LIST>       </ACCOUNTAUDITENTRIES.LIST>
+        <AUDITENTRIES.LIST>       </AUDITENTRIES.LIST>
+        <INPUTCRALLOCS.LIST>       </INPUTCRALLOCS.LIST>
+        <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+        <EXCISEDUTYHEADDETAILS.LIST>       </EXCISEDUTYHEADDETAILS.LIST>
+        <RATEDETAILS.LIST>       </RATEDETAILS.LIST>
+        <SUMMARYALLOCS.LIST>       </SUMMARYALLOCS.LIST>
+        <CENVATDUTYALLOCATIONS.LIST>       </CENVATDUTYALLOCATIONS.LIST>
+        <STPYMTDETAILS.LIST>       </STPYMTDETAILS.LIST>
+        <EXCISEPAYMENTALLOCATIONS.LIST>       </EXCISEPAYMENTALLOCATIONS.LIST>
+        <TAXBILLALLOCATIONS.LIST>       </TAXBILLALLOCATIONS.LIST>
+        <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+        <TDSEXPENSEALLOCATIONS.LIST>       </TDSEXPENSEALLOCATIONS.LIST>
+        <VATSTATUTORYDETAILS.LIST>       </VATSTATUTORYDETAILS.LIST>
+        <COSTTRACKALLOCATIONS.LIST>       </COSTTRACKALLOCATIONS.LIST>
+        <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+        <INVOICEWISEDETAILS.LIST>       </INVOICEWISEDETAILS.LIST>
+        <VATITCDETAILS.LIST>       </VATITCDETAILS.LIST>
+        <ADVANCETAXDETAILS.LIST>       </ADVANCETAXDETAILS.LIST>
+        <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>
+       </ALLLEDGERENTRIES.LIST>`).join('\n');
+
+    const rawRefKey = String(getRowValue(firstRow, 'Reference Key') || getRowValue(firstRow, 'ReferenceKey') || '').trim();
+    let narrationVal = rawRefKey;
+    if (rawRefKey.length > 4) {
+        narrationVal = rawRefKey.substring(0, rawRefKey.length - 4);
+    }
+    const narrationXML = narrationVal ? `\n      <NARRATION>${escapeXML(narrationVal)}</NARRATION>` : '';
+
+    let purchasingDocVal = '';
+    for (const r of items) {
+        const pDoc = getRowValue(r, 'Purchasing Document') || getRowValue(r, 'PurchasingDoc') || getRowValue(r, 'Purchase Order');
+        if (pDoc !== undefined && pDoc !== null && String(pDoc).trim() !== '' && String(pDoc).trim() !== '0') {
+            purchasingDocVal = String(pDoc).split('.')[0].trim();
+            break;
+        }
+    }
+    const referenceXML = purchasingDocVal ? `\n      <REFERENCE>${escapeXML(purchasingDocVal)}</REFERENCE>` : '';
+
+    return `<ENVELOPE>
+ <HEADER>
+  <TALLYREQUEST>Import Data</TALLYREQUEST>
+ </HEADER>
+ <BODY>
+  <IMPORTDATA>
+   <REQUESTDESC>
+    <REPORTNAME>Vouchers</REPORTNAME>
+    <STATICVARIABLES>
+     <SVCURRENTCOMPANY>${COMPANY_NAME}</SVCURRENTCOMPANY>
+    </STATICVARIABLES>
+   </REQUESTDESC>
+   <REQUESTDATA>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <VOUCHER VCHTYPE="Journal" ACTION="Create" OBJVIEW="Accounting Voucher View">
+      <OLDAUDITENTRYIDS.LIST TYPE="Number">
+       <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+      </OLDAUDITENTRYIDS.LIST>
+      <DATE>${dateFormatted}</DATE>
+      <VCHSTATUSDATE>${dateFormatted}</VCHSTATUSDATE>
+      ${narrationXML}
+      <OBJECTUPDATEACTION/>
+      <GSTREGISTRATION TAXTYPE="GST" TAXREGISTRATION="">Tamil Nadu Registration</GSTREGISTRATION>
+      <VOUCHERTYPENAME>${voucherTypeName}</VOUCHERTYPENAME>
+      <PARTYLEDGERNAME>${escapeXML(partyLedger)}</PARTYLEDGERNAME>
+      <VOUCHERNUMBER>${escapeXML(docNumber)}</VOUCHERNUMBER>${referenceXML}
+      <NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
+      <PERSISTEDVIEW>Accounting Voucher View</PERSISTEDVIEW>
+      <VCHSTATUSVOUCHERTYPE>Journal</VCHSTATUSVOUCHERTYPE>
+      <VCHENTRYMODE>As Voucher</VCHENTRYMODE>
+      <EFFECTIVEDATE>${dateFormatted}</EFFECTIVEDATE>
+${ledgerEntriesXML}
+     </VOUCHER>
+    </TALLYMESSAGE>
+   </REQUESTDATA>
+  </IMPORTDATA>
+ </BODY>
+</ENVELOPE>`;
+}
+
 module.exports = {
     getRowValue,
     cleanStateName,
@@ -2471,5 +3011,8 @@ module.exports = {
     generateGRNTallyXML,
     generateStockJournalTallyXML,
     generatePurchaseTallyXML,
+    generateSalesOrderTallyXML,
+    generateFITallyXML,
     loadPOMaster
 };
+

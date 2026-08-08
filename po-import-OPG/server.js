@@ -5,7 +5,7 @@ const xlsx = require('xlsx');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
-const { generateTallyXML, generateGRNTallyXML, generatePurchaseTallyXML, getRowValue, loadPOMaster } = require('./tallyXMLBuilder');
+const { generateTallyXML, generateGRNTallyXML, generatePurchaseTallyXML, generateSalesOrderTallyXML, generateFITallyXML, getRowValue, loadPOMaster } = require('./tallyXMLBuilder');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -93,6 +93,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         const isGRN = importType === 'grn';
         const isPurchase = importType === 'purchase';
         const isStockJournal = importType === 'stock_journal';
+        const isSalesOrder = importType === 'sales_order';
+        const isFI = importType === 'fi';
 
         // Read the uploaded excel sheet
         const workbook = xlsx.readFile(filePath);
@@ -137,6 +139,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                            str === 'Invoice No' || 
                            str === 'Invoice Number' || 
                            str === 'Material Document' ||
+                           str === 'Sales document' ||
                            str === 'Invoicing Party' ||
                            str === 'Vendor';
                 });
@@ -156,7 +159,18 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         res.write(JSON.stringify({ type: 'progress', message: 'Starting row extraction...', rowsParsed: 0, totalRows: rawGrid.length }) + '\n');
 
         // Convert subsequent rows into objects using the detected headers
-        const headers = rawGrid[headerRowIndex].map(h => String(h || '').trim());
+        const headerCount = {};
+        const headers = rawGrid[headerRowIndex].map(h => {
+            const clean = String(h || '').trim();
+            if (!clean) return '';
+            if (headerCount[clean] !== undefined) {
+                headerCount[clean]++;
+                return `${clean}_${headerCount[clean]}`;
+            } else {
+                headerCount[clean] = 0;
+                return clean;
+            }
+        });
         const rawRows = [];
         let rowIndex = headerRowIndex + 1;
         const totalRows = rawGrid.length;
@@ -171,14 +185,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                 const obj = {};
                 headers.forEach((header, colIdx) => {
                     if (header) {
-                        const newVal = row[colIdx];
-                        const hasCurrent = obj[header] !== undefined && obj[header] !== null && String(obj[header]).trim() !== '';
-                        const hasNew = newVal !== undefined && newVal !== null && String(newVal).trim() !== '';
-                        if (hasCurrent && !hasNew) {
-                            // Keep current populated value
-                        } else {
-                            obj[header] = newVal;
-                        }
+                        obj[header] = row[colIdx];
                     }
                 });
                 rawRows.push(obj);
@@ -200,7 +207,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
         function finalizeUpload() {
             // Build global vendor map (for PO only)
-            if (!isGRN && !isPurchase && !isStockJournal) {
+            if (!isGRN && !isPurchase && !isStockJournal && !isSalesOrder && !isFI) {
                 globalVendorMap = {};
                 rawRows.forEach(row => {
                     const vCode = getRowValue(row, 'Vendor');
@@ -240,13 +247,15 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                 });
             }
 
-            // Group rows by 'Material Document', 'Document Number' / 'Invoice No', or 'Purchasing Document'
+            // Group rows by 'Sales document', 'Material Document', 'Document Number' / 'Invoice No', or 'Purchasing Document'
             const groups = {};
             filteredRows.forEach(row => {
                 let groupNum;
-                if (isGRN || isStockJournal) {
+                if (isSalesOrder) {
+                    groupNum = getRowValue(row, 'Sales document') || getRowValue(row, 'Document Number');
+                } else if (isGRN || isStockJournal) {
                     groupNum = getRowValue(row, 'Material Document') || getRowValue(row, 'GRN Number') || getRowValue(row, 'Purchasing Document');
-                } else if (isPurchase) {
+                } else if (isPurchase || isFI) {
                     groupNum = getRowValue(row, 'Document Number') || getRowValue(row, 'Invoice No') || getRowValue(row, 'Invoice Number');
                 } else {
                     groupNum = getRowValue(row, 'Purchasing Document') || getRowValue(row, 'PO Number') || getRowValue(row, 'Document Number');
@@ -273,7 +282,12 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                 const firstRow = poGroup.items[0];
                 let docType = 'ZSPR';
                 let vendorName = '';
-                if (isStockJournal) {
+                if (isSalesOrder) {
+                    const salesDocType = String(getRowValue(firstRow, 'Sales Document Type') || 'ZASH').trim();
+                    docType = `Sales Order ${salesDocType}`;
+                    const partyCode = String(getRowValue(firstRow, 'Ship-to party') || getRowValue(firstRow, 'Party') || '').split('.')[0].trim();
+                    vendorName = partyCode || 'Customer';
+                } else if (isStockJournal) {
                     docType = 'WA';
                     const recPlant = String(getRowValue(firstRow, 'Receiving Plant') || getRowValue(firstRow, 'Plant') || '').trim();
                     vendorName = recPlant ? `Stock Transfer (${recPlant})` : 'Stock Transfer';
@@ -304,6 +318,17 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                     const rawParty = getRowValue(firstRow, 'Invoicing Party') || getRowValue(firstRow, 'Vendor');
                     const rawVendorName = getRowValue(firstRow, 'Vendor Name') || getRowValue(firstRow, 'Vendor Description');
                     vendorName = rawVendorName ? String(rawVendorName).trim() : (rawParty ? String(rawParty).split('.')[0].trim() : 'Unknown Vendor');
+                } else if (isFI) {
+                    const rawDocType = String(getRowValue(firstRow, 'Doc Type') || 'FI').trim();
+                    docType = rawDocType;
+                    // Vendor priority: Vendor column first, else G/L Account
+                    const vendorVal = getRowValue(firstRow, 'Vendor');
+                    const glVal = getRowValue(firstRow, 'G/L Account') || getRowValue(firstRow, 'G/L Account_1');
+                    const partyCode = (vendorVal !== undefined && vendorVal !== null && String(vendorVal).trim() !== '' && String(vendorVal).trim() !== '0')
+                        ? String(vendorVal).split('.')[0].trim()
+                        : (glVal ? String(glVal).split('.')[0].trim() : 'Unknown Party');
+                    const vendorDesc = getRowValue(firstRow, 'Vendor Name') || getRowValue(firstRow, 'Vendor Description') || getRowValue(firstRow, 'GST Partner') || getRowValue(firstRow, 'Line Item Desc') || getRowValue(firstRow, 'Text') || '';
+                    vendorName = vendorDesc ? `${partyCode}-${String(vendorDesc).trim()}` : partyCode;
                 } else {
                     docType = String(getRowValue(firstRow, 'Doc Type') || getRowValue(firstRow, 'PO - Doc Type') || getRowValue(firstRow, 'Document Type') || 'ZSPR').trim();
                     vendorName = String(getRowValue(firstRow, 'Vendor Name') || '').trim();
@@ -350,12 +375,12 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
             });
 
             if (poList.length === 0) {
-                const label = isStockJournal ? 'Stock Journal' : (isGRN ? 'GRN' : (isPurchase ? 'Purchase Invoice' : 'purchase order'));
+                const label = isFI ? 'Financial Entry (FI)' : (isStockJournal ? 'Stock Journal' : (isGRN ? 'GRN' : (isPurchase ? 'Purchase Invoice' : 'purchase order')));
                 res.write(JSON.stringify({ type: 'error', error: `No valid ${label} entries found in the sheet.` }) + '\n');
                 return res.end();
             }
 
-            const label = isStockJournal ? 'Stock Journal' : (isGRN ? 'GRN' : (isPurchase ? 'Purchase Invoice' : 'Purchase Order'));
+            const label = isFI ? 'Financial Entry (FI)' : (isStockJournal ? 'Stock Journal' : (isGRN ? 'GRN' : (isPurchase ? 'Purchase Invoice' : 'Purchase Order')));
             res.write(JSON.stringify({
                 type: 'result',
                 message: `Excel file processed successfully. Found ${poList.length} ${label} records.${ignoredPurchaseInvoices.length > 0 ? ` Ignored ${ignoredPurchaseInvoices.length} invoices with missing Reference Document.` : ''}`,
@@ -451,13 +476,19 @@ app.post('/api/import', async (req, res) => {
                 continue;
             }
 
-            const xmlPayload = isStockJournal
-                ? generateStockJournalTallyXML(poGroup)
-                : (isGRN
-                    ? generateGRNTallyXML(poGroup)
-                    : (isPurchase
-                        ? generatePurchaseTallyXML(poGroup, globalVendorMap)
-                        : generateTallyXML(poGroup, globalVendorMap)));
+            const isSalesOrder = importType === 'sales_order';
+            const isFI = importType === 'fi';
+            const xmlPayload = isFI
+                ? generateFITallyXML(poGroup)
+                : (isSalesOrder
+                    ? generateSalesOrderTallyXML(poGroup)
+                    : (isStockJournal
+                        ? generateStockJournalTallyXML(poGroup)
+                        : (isGRN
+                            ? generateGRNTallyXML(poGroup)
+                            : (isPurchase
+                                ? generatePurchaseTallyXML(poGroup, globalVendorMap)
+                                : generateTallyXML(poGroup, globalVendorMap)))));
             let tallyResponse = null;
             let tallyParsed = null;
             let status = 'pending';
