@@ -1,0 +1,163 @@
+================================================================================
+          PURCHASE INVOICE: EXCEL COLUMN TO TALLY XML MAPPING GUIDE
+================================================================================
+
+This document provides a comprehensive, field-by-field breakdown of how 
+data from the Purchase Invoice Excel sheet is parsed, processed, and 
+mapped into Tally XML format.
+
+--------------------------------------------------------------------------------
+1. HIGH-LEVEL WORKFLOW & GROUPING LOGIC
+--------------------------------------------------------------------------------
+1.1 Grouping:
+    - All rows in the Excel sheet are grouped into a single invoice voucher using:
+      Primary Column : "Document Number"
+      Fallback Column: "Invoice No" / "Invoice Number"
+
+1.2 Splitting Line Item Types:
+    Each invoice group divides its rows into two categories:
+    a) Stock Inventory Items:
+       - Rows where "Condition Type" is EMPTY / BLANK.
+       - These represent physical items and are mapped into <ALLINVENTORYENTRIES.LIST>.
+    b) Additional Cost / Charge Ledgers:
+       - Rows where "Condition Type" is NOT EMPTY (e.g. ZINS, ZFRV, ZBCA).
+       - These are aggregated by condition code and mapped into <LEDGERENTRIES.LIST>.
+
+1.3 Filter Ignored Items:
+    - Any row with "Deletion Indicator" = 'L' is excluded.
+
+--------------------------------------------------------------------------------
+2. VOUCHER HEADER LEVEL (<VOUCHER>)
+--------------------------------------------------------------------------------
+XML Tag                  | Excel Column(s) Used              | Transformation / Logic
+-------------------------+-----------------------------------+--------------------------------------------------
+<VOUCHERNUMBER>          | Document Number / Invoice No      | Cleaned numeric string (e.g., "5105643179")
+<REFERENCE>              | Reference                         | String (e.g., supplier invoice number / bill ref)
+<DATE>                   | Posting Date / Document Date      | Formatted as YYYYMMDD (e.g., "20230831")
+<REFERENCEDATE>          | Posting Date / Document Date      | Formatted as YYYYMMDD
+<VCHSTATUSDATE>          | Posting Date / Document Date      | Formatted as YYYYMMDD
+<EFFECTIVEDATE>          | Posting Date / Document Date      | Formatted as YYYYMMDD
+<GUID>                   | Document Number                   | Format: "81f73e2b-a3c5-4ff2-a56f-{VOUCHERNUMBER}"
+<VOUCHERTYPENAME>        | PO - Doc Type / Purchasing Doc    | "Purchase {PO - Doc Type}" (e.g., "Purchase ZCOL", 
+                         | Type / Doc Type                   |  "Purchase ZIMP", fallback: "Purchase ZSPR")
+VCHTYPE (Attribute)      | PO - Doc Type / Purchasing Doc    | Matches <VOUCHERTYPENAME>
+<PARTYLEDGERNAME>        | Vendor / Invoicing Party          | Lookup Vendor Master: "{Code}-{Name}". 
+                         |                                   | If vendor missing: "Unknown Vendor"
+<PARTYNAME>              | Vendor / Invoicing Party          | Same as <PARTYLEDGERNAME>
+<BASICBUYERNAME>         | System Config                     | Company Name (e.g., "Opg-Data-Po-Grn")
+<SVCURRENTCOMPANY>       | System Config                     | Company Name (e.g., "Opg-Data-Po-Grn")
+<ISINVOICE>              | Constant                          | "Yes"
+<VCHENTRYMODE>           | Constant                          | "Item Invoice"
+<USETRACKINGNUMBER>      | Constant                          | "No"
+
+Address & Tax Info:
+<ADDRESS>                | Street, City (or Vendor Master)   | "Street, City"
+<STATENAME>              | Region Name (or Vendor Master)    | Sanitized State Name (e.g., "Tamil Nadu")
+<PLACEOFSUPPLY>          | Region Name (or Vendor Master)    | State Name
+<PARTYGSTIN>             | GST NO (or Vendor Master)         | Cleaned GSTIN string
+<GSTREGISTRATIONTYPE>    | Constant                          | "&#4; Unknown"
+
+--------------------------------------------------------------------------------
+3. STOCK INVENTORY ITEMS (<ALLINVENTORYENTRIES.LIST>)
+   (Applies to rows where "Condition Type" is blank)
+--------------------------------------------------------------------------------
+XML Tag                  | Excel Column(s) Used              | Transformation / Logic
+-------------------------+-----------------------------------+--------------------------------------------------
+<STOCKITEMNAME>          | Material, Material Description,   | Uses Item Master Alias or combines:
+                         | Short Text, Text                  | "Material" or "{Material}-{Description}"
+<ACTUALQTY>              | Quantity / Qty in OPUn,           | Formatted with 3 decimals if fractional:
+                         | Order Unit / Base Unit of Measure | e.g., " 60000 MT" or " 1 NOS"
+<BILLEDQTY>              | Quantity / Qty in OPUn,           | Same as <ACTUALQTY>
+                         | Order Unit / Base Unit of Measure |
+<RATE>                   | Calculated: (Amount / Quantity)   | "{Price}/{Unit}" (e.g., "3.14/MT")
+<AMOUNT>                 | Amount / Total Value,             | Debit amount sent as negative value:
+                         | Exchange Rate, Currency           | -1 * (Amount * ExchangeRate) (e.g., "-188368.68")
+<ISDEEMEDPOSITIVE>       | Constant                          | "Yes" (Debit entry)
+
+Sub-section: <BATCHALLOCATIONS.LIST>
+  <GODOWNNAME>           | Plant                             | Plant code (e.g., "1000", "9001", default "1000")
+  <DESTINATIONGODOWNNAME>| Plant                             | Same as <GODOWNNAME>
+  <BATCHNAME>            | Constant                          | "Primary Batch"
+  <ORDERNO>              | Purchasing Document / PO Number   | Original PO number linked to item
+  <TRACKINGNUMBER>       | Reference Document / Ref Document | GRN / Material Document tracking number.
+                         | / GRN Number                      | If empty: "&#4; Not Applicable"
+  <ACTUALQTY>            | Quantity + Order Unit             | " 60000 MT"
+  <BILLEDQTY>            | Quantity + Order Unit             | " 60000 MT"
+  <AMOUNT>               | Calculated Net Item Amount        | "-188368.68"
+
+Sub-section: <ACCOUNTINGALLOCATIONS.LIST>
+  <LEDGERNAME>           | PO - Doc Type / Purchasing Doc    | "Purchase {PO - Doc Type}" (e.g., "Purchase ZCOL",
+                         | Type / Doc Type                   |  "Purchase ZIMP", fallback: "Purchase ZSPR")
+  <ISDEEMEDPOSITIVE>     | Constant                          | "Yes"
+  <AMOUNT>               | Calculated Net Item Amount        | "-188368.68"
+  <GSTCLASS>             | Constant                          | "&#4; Not Applicable"
+
+--------------------------------------------------------------------------------
+4. ADDITIONAL CHARGES / FEE LEDGERS (<LEDGERENTRIES.LIST>)
+   (Applies to rows where "Condition Type" is populated)
+--------------------------------------------------------------------------------
+XML Tag                  | Excel Column(s) Used              | Transformation / Logic
+-------------------------+-----------------------------------+--------------------------------------------------
+<LEDGERNAME>             | Condition Type                    | Ledger name is the condition code (e.g., "ZINS",
+                         |                                   | "ZFRV", "ZBCA", "ZCEQ")
+<ISDEEMEDPOSITIVE>       | Constant                          | "Yes" (Debit expense)
+<ISPARTYLEDGER>          | Constant                          | "No"
+<AMOUNT>                 | Amount (summed per Condition Type)| Negative summed amount: "-{SummedAmount}"
+<VATEXPAMOUNT>           | Amount                            | "-{SummedAmount}"
+<GSTCLASS>               | Constant                          | "&#4; Not Applicable"
+
+--------------------------------------------------------------------------------
+5. TAXES LEDGER (<LEDGERENTRIES.LIST>)
+   (Included only if Tax Amount > 0)
+--------------------------------------------------------------------------------
+XML Tag                  | Excel Column(s) Used              | Transformation / Logic
+-------------------------+-----------------------------------+--------------------------------------------------
+<LEDGERNAME>             | Value-Added Tax Amt               | "Taxes"
+<ISDEEMEDPOSITIVE>       | Constant                          | "Yes" (Debit)
+<ISPARTYLEDGER>          | Constant                          | "No"
+<AMOUNT>                 | Value-Added Tax Amt               | "-{TaxAmount}"
+<VATEXPAMOUNT>           | Value-Added Tax Amt               | "-{TaxAmount}"
+
+--------------------------------------------------------------------------------
+6. VENDOR CREDIT / PARTY BALANCING ENTRY (<LEDGERENTRIES.LIST>)
+--------------------------------------------------------------------------------
+XML Tag                  | Excel Column(s) Used              | Transformation / Logic
+-------------------------+-----------------------------------+--------------------------------------------------
+<LEDGERNAME>             | Vendor / Invoicing Party          | Party ledger name (e.g., "0000090168" or 
+                         |                                   | "Unknown Vendor")
+<ISPARTYLEDGER>          | Constant                          | "Yes"
+<ISDEEMEDPOSITIVE>       | Constant                          | "No" (Credit entry to balance the voucher)
+<AMOUNT>                 | Total Net Value + Total Additional| Total positive invoice amount:
+                         | Costs + Taxes                     | "+{TotalSum}" (Balances Dr & Cr to 0 difference)
+
+Sub-section: <BILLALLOCATIONS.LIST>
+  <NAME>                 | Document Number / Invoice No      | Invoice Number
+  <BILLTYPE>             | Constant                          | "New Ref"
+  <AMOUNT>               | Total Invoice Value               | "+{TotalSum}"
+
+--------------------------------------------------------------------------------
+7. SUMMARY OF REQUIRED TALLY MASTERS
+--------------------------------------------------------------------------------
+To prevent import errors when uploading purchase invoices, ensure the following
+masters are configured in your Tally Company:
+
+1. Voucher Types (under 'Purchase'):
+   - Purchase ZCOL
+   - Purchase ZIMP
+   - Purchase ZDOM
+   - Purchase ZCON
+   - Purchase ZSER
+   - Purchase ZSTO
+   - Purchase ZSPR
+
+2. Purchase Ledgers (under 'Purchase Accounts'):
+   - Purchase ZCOL, Purchase ZIMP, Purchase ZDOM, etc.
+
+3. Additional Expense Ledgers (under 'Direct/Indirect Expenses'):
+   - Ledgers corresponding to Condition Types (e.g. ZINS, ZFRV, ZBCA, ZCEQ, ZRTQ, etc.)
+
+4. Party Ledgers (under 'Sundry Creditors'):
+   - Individual vendor ledgers (e.g. "0000090168", "0000090004", etc.)
+   - "Unknown Vendor" (fallback when vendor is omitted in the Excel sheet)
+
+================================================================================

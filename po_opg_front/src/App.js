@@ -2,12 +2,15 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import './App.css';
 import XmlVisualizer from './XmlVisualizer';
 import DayBookVisualizer from './DayBookVisualizer';
+import TemplatesViewer from './TemplatesViewer';
 
 function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeMode, setActiveMode] = useState('importer'); // 'importer' | 'visualizer' | 'daybook'
   const [importType, setImportType] = useState('po'); // 'po' | 'grn'
   const [file, setFile] = useState(null);
+  const [poVendorFormat, setPoVendorFormat] = useState('merged'); // 'merged' | 'separate'
+  const [vendorMappingFile, setVendorMappingFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [parsingProgress, setParsingProgress] = useState(null); // { message, rowsParsed, totalRows }
   const [importing, setImporting] = useState(false);
@@ -22,6 +25,7 @@ function App() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [importTimeTaken, setImportTimeTaken] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingMapping, setIsDraggingMapping] = useState(false);
   const [copySuccess, setCopySuccess] = useState(null);
   const [skipBlankMaterial, setSkipBlankMaterial] = useState(false);
   const [rangeFrom, setRangeFrom] = useState(1);
@@ -33,11 +37,19 @@ function App() {
   const [showIgnoredModal, setShowIgnoredModal] = useState(false);
 
   const fileInputRef = useRef(null);
+  const mappingFileInputRef = useRef(null);
 
   const handleDropzoneClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
       fileInputRef.current.click();
+    }
+  };
+
+  const handleMappingDropzoneClick = () => {
+    if (mappingFileInputRef.current) {
+      mappingFileInputRef.current.value = '';
+      mappingFileInputRef.current.click();
     }
   };
 
@@ -47,6 +59,13 @@ function App() {
       setError(null);
       setParsedPOs(null);
       setImportResults(null);
+    }
+  };
+
+  const handleMappingFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setVendorMappingFile(e.target.files[0]);
+      setError(null);
     }
   };
 
@@ -74,9 +93,36 @@ function App() {
     }
   }, []);
 
+  const handleMappingDragOver = useCallback((e) => {
+    e.preventDefault();
+    setIsDraggingMapping(true);
+  }, []);
+
+  const handleMappingDragLeave = useCallback((e) => {
+    e.preventDefault();
+    setIsDraggingMapping(false);
+  }, []);
+
+  const handleMappingDrop = useCallback((e) => {
+    e.preventDefault();
+    setIsDraggingMapping(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped && (dropped.name.endsWith('.xlsx') || dropped.name.endsWith('.xls'))) {
+      setVendorMappingFile(dropped);
+      setError(null);
+    } else if (dropped) {
+      setError('Please drop a valid Excel file (.xlsx or .xls) for Vendor Mapping.');
+    }
+  }, []);
+
   const handleUpload = async () => {
     if (!file) {
       setError('Please select an Excel file first.');
+      return;
+    }
+
+    if (importType === 'po' && poVendorFormat === 'separate' && !vendorMappingFile) {
+      setError('Please select the Vendor Mapping Excel file or switch to Merged file format.');
       return;
     }
 
@@ -88,6 +134,9 @@ function App() {
 
     const formData = new FormData();
     formData.append('file', file);
+    if (importType === 'po' && poVendorFormat === 'separate' && vendorMappingFile) {
+      formData.append('vendorMappingFile', vendorMappingFile);
+    }
 
     try {
       const response = await fetch(`http://192.168.1.166:5001/api/upload?importType=${importType}`, {
@@ -214,9 +263,10 @@ function App() {
     setImportResults(initialResults);
     setCurrentPage(1);
 
-    for (let i = 0; i < posToImport.length; i++) {
-      const po = posToImport[i];
+    const CONCURRENCY = 5;
+    let completedCount = 0;
 
+    const processSinglePo = async (po, i) => {
       setImportResults(prev => prev.map((item, idx) =>
         idx === i ? { ...item, status: 'processing' } : item
       ));
@@ -228,7 +278,13 @@ function App() {
           body: JSON.stringify({ selectedPOs: [po], importType, skipBlankMaterial }),
         });
 
-        const data = await response.json();
+        const resText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(resText);
+        } catch (e) {
+          throw new Error(`Server Error (${response.status}): ${resText.replace(/<[^>]*>/g, '').substring(0, 150)}`);
+        }
 
         if (!response.ok) {
           throw new Error(data.error || 'Import failed');
@@ -254,20 +310,31 @@ function App() {
             error: err.message || 'Connection Error'
           } : item
         ));
+      } finally {
+        completedCount++;
+        const elapsedMs = Date.now() - startTime;
+        const remainingCount = posToImport.length - completedCount;
+        if (completedCount > 0 && remainingCount > 0) {
+          const avgTimePerItemMs = elapsedMs / completedCount;
+          const estRemainingSec = Math.ceil((avgTimePerItemMs * remainingCount) / 1000);
+          setEtaSeconds(estRemainingSec);
+        } else {
+          setEtaSeconds(0);
+        }
       }
+    };
 
-      // Calculate ETA
-      const elapsedMs = Date.now() - startTime;
-      const completedCount = i + 1;
-      const remainingCount = posToImport.length - completedCount;
-      if (completedCount > 0 && remainingCount > 0) {
-        const avgTimePerItemMs = elapsedMs / completedCount;
-        const estRemainingSec = Math.ceil((avgTimePerItemMs * remainingCount) / 1000);
-        setEtaSeconds(estRemainingSec);
-      } else {
-        setEtaSeconds(0);
+    const queue = posToImport.map((po, index) => ({ po, index }));
+    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        if (item) {
+          await processSinglePo(item.po, item.index);
+        }
       }
-    }
+    });
+
+    await Promise.all(workers);
 
     const endTime = Date.now();
     setImportTimeTaken(((endTime - startTime) / 1000).toFixed(2));
@@ -697,6 +764,19 @@ function App() {
             </svg>
             {!isSidebarCollapsed && <span>DayBook Report</span>}
           </button>
+          <button 
+            className={`mode-btn ${activeMode === 'templates' ? 'active' : ''}`}
+            onClick={() => setActiveMode('templates')}
+            title="Excel Header Templates"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+            {!isSidebarCollapsed && <span>Excel Templates</span>}
+          </button>
           {/* <button 
             className={`mode-btn ${activeMode === 'daybook' ? 'active' : ''}`}
             onClick={() => setActiveMode('daybook')}
@@ -866,61 +946,201 @@ function App() {
                    (importType === 'sales_order' ? 'Drop your SAP Sales Order Excel export to start importing Sales Orders into Tally.' : 
                     (importType === 'fi' ? 'Drop your FI Data Excel export to start importing Journal entries into Tally.' : 'Drop your SAP GRN Excel export to start importing Receipt Notes into Tally.'))))}
               </p>
+              <div style={{ marginTop: '10px' }}>
+                <a
+                  href={`http://192.168.1.166:5001/api/templates/download/${importType}`}
+                  download
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    color: '#10b981',
+                    textDecoration: 'none',
+                    background: 'rgba(16, 185, 129, 0.08)',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    transition: 'all 0.2s'
+                  }}
+                  title="Download clean Excel template with only the required columns for this module"
+                >
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Download Required Columns Template (.xlsx)
+                </a>
+              </div>
             </div>
 
-            <div className="upload-area">
-              <div
-                className={`dropzone ${isDragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
-                onClick={handleDropzoneClick}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <input
-                  type="file"
-                  id="fileInput"
-                  ref={fileInputRef}
-                  accept=".xlsx,.xls"
-                  onChange={handleFileChange}
-                  className="hidden-input"
-                />
+            {importType === 'po' && (
+              <div style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                padding: '14px 18px',
+                marginBottom: '20px',
+                maxWidth: '680px',
+                marginLeft: 'auto',
+                marginRight: 'auto'
+              }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-1)', marginBottom: '10px' }}>
+                  Charge Vendor Mapping Format:
+                </div>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-2)' }}>
+                    <input
+                      type="radio"
+                      name="poVendorFormat"
+                      value="merged"
+                      checked={poVendorFormat === 'merged'}
+                      onChange={() => { setPoVendorFormat('merged'); setVendorMappingFile(null); setError(null); }}
+                      style={{ accentColor: 'var(--accent)' }}
+                    />
+                    <span><strong>Merged in Single File</strong> (Vendors included in charge columns)</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-2)' }}>
+                    <input
+                      type="radio"
+                      name="poVendorFormat"
+                      value="separate"
+                      checked={poVendorFormat === 'separate'}
+                      onChange={() => { setPoVendorFormat('separate'); setError(null); }}
+                      style={{ accentColor: 'var(--accent)' }}
+                    />
+                    <span><strong>Separate Vendor Mapping File</strong> (Main PO + Vendor Mapping Excel)</span>
+                  </label>
+                </div>
+              </div>
+            )}
 
-                {file ? (
-                  <div className="file-ready">
-                    <div className="file-icon-wrap success">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="28" height="28">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <polyline points="9 15 11 17 15 13" />
-                      </svg>
+            <div className="upload-area">
+              <div style={{ display: 'flex', gap: '16px', width: '100%', maxWidth: poVendorFormat === 'separate' && importType === 'po' ? '850px' : '520px', margin: '0 auto', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ flex: '1 1 340px', minWidth: '300px' }}>
+                  {poVendorFormat === 'separate' && importType === 'po' && (
+                    <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-2)', marginBottom: '6px', textAlign: 'left' }}>
+                      1. Main PO Data Excel:
                     </div>
-                    <div className="file-info-block">
-                      <span className="file-name-text">{file.name}</span>
-                      <span className="file-size-text">{(file.size / 1024).toFixed(1)} KB · Excel Workbook</span>
-                    </div>
-                    <button
-                      className="file-remove-btn"
-                      onClick={(e) => { e.stopPropagation(); setFile(null); }}
-                      title="Remove file"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
+                  )}
+                  <div
+                    className={`dropzone ${isDragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
+                    onClick={handleDropzoneClick}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    <input
+                      type="file"
+                      id="fileInput"
+                      ref={fileInputRef}
+                      accept=".xlsx,.xls"
+                      onChange={handleFileChange}
+                      className="hidden-input"
+                    />
+
+                    {file ? (
+                      <div className="file-ready">
+                        <div className="file-icon-wrap success">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="28" height="28">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <polyline points="9 15 11 17 15 13" />
+                          </svg>
+                        </div>
+                        <div className="file-info-block">
+                          <span className="file-name-text">{file.name}</span>
+                          <span className="file-size-text">{(file.size / 1024).toFixed(1)} KB · PO Excel</span>
+                        </div>
+                        <button
+                          className="file-remove-btn"
+                          onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                          title="Remove file"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="dropzone-prompt">
+                        <div className={`upload-icon-wrap ${isDragging ? 'bounce' : ''}`}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="36" height="36">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                          </svg>
+                        </div>
+                        <p className="drop-title">{isDragging ? 'Release to upload' : 'Drag & drop PO Excel'}</p>
+                        <p className="drop-sub">or <span className="drop-link">browse file</span></p>
+                        <p className="drop-hint">.xlsx or .xls · {importType === 'po' ? 'SAP PO export format' : (importType === 'purchase' ? 'Purchase Invoice format' : 'SAP GRN export format')}</p>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="dropzone-prompt">
-                    <div className={`upload-icon-wrap ${isDragging ? 'bounce' : ''}`}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="36" height="36">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="17 8 12 3 7 8" />
-                        <line x1="12" y1="3" x2="12" y2="15" />
-                      </svg>
+                </div>
+
+                {importType === 'po' && poVendorFormat === 'separate' && (
+                  <div style={{ flex: '1 1 340px', minWidth: '300px' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-2)', marginBottom: '6px', textAlign: 'left' }}>
+                      2. Vendor Mapping Excel:
                     </div>
-                    <p className="drop-title">{isDragging ? 'Release to upload' : 'Drag & drop your Excel file'}</p>
-                    <p className="drop-sub">or <span className="drop-link">browse to choose a file</span></p>
-                    <p className="drop-hint">.xlsx or .xls · {importType === 'po' ? 'SAP PO export format' : (importType === 'purchase' ? 'Purchase Invoice format' : 'SAP GRN export format')}</p>
+                    <div
+                      className={`dropzone ${isDraggingMapping ? 'dragging' : ''} ${vendorMappingFile ? 'has-file' : ''}`}
+                      onClick={handleMappingDropzoneClick}
+                      onDragOver={handleMappingDragOver}
+                      onDragLeave={handleMappingDragLeave}
+                      onDrop={handleMappingDrop}
+                    >
+                      <input
+                        type="file"
+                        id="mappingFileInput"
+                        ref={mappingFileInputRef}
+                        accept=".xlsx,.xls"
+                        onChange={handleMappingFileChange}
+                        className="hidden-input"
+                      />
+
+                      {vendorMappingFile ? (
+                        <div className="file-ready">
+                          <div className="file-icon-wrap success">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="28" height="28">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <polyline points="9 15 11 17 15 13" />
+                            </svg>
+                          </div>
+                          <div className="file-info-block">
+                            <span className="file-name-text">{vendorMappingFile.name}</span>
+                            <span className="file-size-text">{(vendorMappingFile.size / 1024).toFixed(1)} KB · Vendor Mapping</span>
+                          </div>
+                          <button
+                            className="file-remove-btn"
+                            onClick={(e) => { e.stopPropagation(); setVendorMappingFile(null); }}
+                            title="Remove file"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="dropzone-prompt">
+                          <div className={`upload-icon-wrap ${isDraggingMapping ? 'bounce' : ''}`}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="36" height="36">
+                              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                            </svg>
+                          </div>
+                          <p className="drop-title">{isDraggingMapping ? 'Release to upload' : 'Drag & drop Vendor Mapping'}</p>
+                          <p className="drop-sub">or <span className="drop-link">browse mapping file</span></p>
+                          <p className="drop-hint">.xlsx or .xls · (PO NUMBER, Line Item, Condition type, Vendor)</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1648,6 +1868,8 @@ function App() {
           </>
         ) : activeMode === 'visualizer' ? (
           <XmlVisualizer />
+        ) : activeMode === 'templates' ? (
+          <TemplatesViewer initialModule={importType} />
         ) : (
           <DayBookVisualizer />
         )}

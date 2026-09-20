@@ -2,8 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
 
+const config = require('./config');
+
 let conditionTypeMap = null;
-const COMPANY_NAME = 'Opg Legacy Data (22-23)';
+const COMPANY_NAME = config.COMPANY_NAME;
 
 /**
  * Loads the mapping of condition types to descriptive names from condition_types_Desc_MM.xlsx
@@ -63,7 +65,7 @@ function getRowValue(row, colName) {
     const codeMatch = colName.match(/^([A-Z0-9]+)/i);
     if (codeMatch) {
         const code = codeMatch[1].toLowerCase();
-        const reservedWords = ['po', 'document', 'purchasing', 'material', 'invoicing', 'vendor', 'reference', 'item', 'order', 'quantity', 'amount', 'unit', 'plant', 'stock', 'total'];
+        const reservedWords = ['po', 'doc', 'document', 'purchasing', 'material', 'invoicing', 'vendor', 'reference', 'item', 'order', 'quantity', 'amount', 'unit', 'plant', 'stock', 'total'];
         if (code.length >= 3 && !reservedWords.includes(code)) {
             for (const key of Object.keys(row)) {
                 const keyCodeMatch = key.match(/^([A-Z0-9]+)/i);
@@ -118,7 +120,8 @@ function getExactKey(row, colName) {
     const codeMatch = colName.match(/^([A-Z0-9]+)/i);
     if (codeMatch) {
         const code = codeMatch[1].toLowerCase();
-        if (code.length >= 3 && code !== 'po') {
+        const reservedWords = ['po', 'doc', 'document', 'purchasing', 'material', 'invoicing', 'vendor', 'reference', 'item', 'order', 'quantity', 'amount', 'unit', 'plant', 'stock', 'total'];
+        if (code.length >= 3 && !reservedWords.includes(code)) {
             for (const key of Object.keys(row)) {
                 const keyCodeMatch = key.match(/^([A-Z0-9]+)/i);
                 if (keyCodeMatch && keyCodeMatch[1].toLowerCase() === code) {
@@ -135,6 +138,21 @@ function getExactKey(row, colName) {
  */
 function getVendorCodeForRow(row, colName) {
     if (!row || !colName) return undefined;
+
+    // Check if row has dedicated charge vendor mapping from vendor mapping file
+    if (row._chargeVendors) {
+        const code = getConditionCode(colName);
+        if (code && row._chargeVendors[code]) {
+            return row._chargeVendors[code];
+        }
+        const cleanCol = colName.toLowerCase().replace(/\s/g, '');
+        for (const [k, v] of Object.entries(row._chargeVendors)) {
+            if (k.toLowerCase().replace(/\s/g, '') === cleanCol) {
+                return v;
+            }
+        }
+    }
+
     const cleanColName = colName.toLowerCase().replace(/\s/g, '');
     for (const key of Object.keys(row)) {
         const cleanKey = key.toLowerCase().replace(/\s/g, '');
@@ -299,8 +317,16 @@ function generateTallyXML(poGroup, vendorMap = {}) {
     const condMap = loadConditionTypeMap();
     const firstRow = poGroup.items[0];
     const poNumber = escapeXML(String(getRowValue(firstRow, 'Purchasing Document')).split('.')[0].trim());
-    const docType = escapeXML(String(getRowValue(firstRow, 'Doc Type') || 'ZSPR').trim());
-    const docDateFormatted = formatDate(getRowValue(firstRow, 'Doc Date'));
+    const rawDocType = poGroup.docType ||
+        getRowValue(firstRow, 'PO -  Doc Type') ||
+        getRowValue(firstRow, 'PO - Doc Type') ||
+        getRowValue(firstRow, 'Purchasing Doc Type') ||
+        getRowValue(firstRow, 'Purchasing Doc. Type') ||
+        getRowValue(firstRow, 'Doc Type') ||
+        getRowValue(firstRow, 'Document Type') ||
+        'ZSPR';
+    const docType = escapeXML(String(rawDocType).trim());
+    const docDateFormatted = formatDate(getRowValue(firstRow, 'Document Date') || getRowValue(firstRow, 'Doc Date') || getRowValue(firstRow, 'PO Date') || getRowValue(firstRow, 'Posting Date'));
 
     const vendorCode = padVendor(getRowValue(firstRow, 'Vendor'));
     const rawVendorName = String(getRowValue(firstRow, 'Vendor Name') || (vendorCode ? vendorMap[vendorCode] || '' : '')).trim();
@@ -313,7 +339,8 @@ function generateTallyXML(poGroup, vendorMap = {}) {
 
     const postCode = escapeXML(getRowValue(firstRow, 'Post Code') ? String(getRowValue(firstRow, 'Post Code')).split('.')[0].trim() : '');
     const gstNo = escapeXML(String(getRowValue(firstRow, 'GST NO') || '').trim());
-    const isGst33OrBlank = !gstNo || gstNo.startsWith('33');
+    const destRegion = String(getRowValue(firstRow, 'Destination region') || getRowValue(firstRow, 'Destination Region') || getRowValue(firstRow, 'Region') || '').trim();
+    const isGst33OrBlank = destRegion ? (destRegion === '33' || destRegion.startsWith('33')) : (!gstNo || gstNo.startsWith('33'));
     const regionName = escapeXML(cleanStateName(getRowValue(firstRow, 'Region Name')));
 
     const cmpState = 'Tamil Nadu'; // Default Company state is Tamil Nadu
@@ -331,15 +358,34 @@ function generateTallyXML(poGroup, vendorMap = {}) {
         return '';
     }
 
+    const isZcol = docType === 'ZCOL';
+
     const itemsXML = activeItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
+        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
+
+        const currency = String(getRowValue(item, 'Currency') || 'INR').trim().toUpperCase();
+        const exRateVal = parseFloat(getRowValue(item, 'Exchange Rate')) || 1;
+        const exchangeRate = (currency !== 'INR' && exRateVal > 0) ? exRateVal : 1;
 
         const qty = parseFloat(getRowValue(item, 'Order Quantity')) || 0;
         const unit = escapeXML(String(getRowValue(item, 'Order Unit') || 'Nos').trim());
-        const price = parseFloat(getRowValue(item, 'Net Order Price')) || 0;
-        const amount = parseFloat(getRowValue(item, 'Net Order Value')) || (qty * price);
+
+        let rawPrice = parseFloat(getRowValue(item, 'Net Order Price')) || 0;
+        let rawAmount = parseFloat(getRowValue(item, 'Net Order Value')) || (qty * rawPrice);
+
+        // For ZCOL: directly use Effective Value for Item Amount and calculate Rate based on Effective Value
+        if (isZcol) {
+            const effectiveVal = parseFloat(getRowValue(item, 'Effective value') || getRowValue(item, 'Effective Value'));
+            if (!isNaN(effectiveVal) && effectiveVal > 0) {
+                rawAmount = effectiveVal;
+                rawPrice = qty > 0 ? (effectiveVal / qty) : rawPrice;
+            }
+        }
+
+        const price = rawPrice * exchangeRate;
+        const amount = rawAmount * exchangeRate;
 
         totalNetValue += amount;
 
@@ -498,28 +544,6 @@ function generateTallyXML(poGroup, vendorMap = {}) {
         if (Math.abs(colSum) > 0.001) {
             const cleanColName = col.toLowerCase().replace(/\s/g, '');
 
-            // JEXS / NAVS split logic
-            if (cleanColName === 'jexs' || cleanColName === 'navs') {
-                if (isGst33OrBlank) {
-                    const halfSum = colSum / 2;
-                    activeLedgers.push({
-                        name: 'CGST',
-                        sum: halfSum
-                    });
-                    activeLedgers.push({
-                        name: 'SGST',
-                        sum: halfSum
-                    });
-                } else {
-                    activeLedgers.push({
-                        name: 'IGST',
-                        sum: colSum
-                    });
-                }
-                totalTaxesAndCharges += colSum;
-                return;
-            }
-
             const exactKey = getExactKey(firstRow, col);
             const condCode = getConditionCode(col);
             const mappedName = condMap[condCode];
@@ -530,7 +554,9 @@ function generateTallyXML(poGroup, vendorMap = {}) {
             }
             const normalizedName = escapeXML(finalLedgerName);
 
-            if (docType === 'ZCOL' && cleanColName !== 'jexs' && cleanColName !== 'navs' && cleanColName !== 'zcec' && cleanColName !== 'zceq') {
+            // If ZCOL: ALL charges, cess, and taxes (JEXS, NAVS, etc.) are passed inside UDF fields with NO exceptions.
+            // No external tax or charge ledgers are created outside for ZCOL.
+            if (isZcol) {
                 if (udfCount < udfSlots.length) {
                     const slot = udfSlots[udfCount];
                     udfCount++;
@@ -573,6 +599,28 @@ function generateTallyXML(poGroup, vendorMap = {}) {
                     udfXmls.push(slotXml);
                 }
             } else {
+                // Non-ZCOL POs: Split JEXS/NAVS into CGST/SGST/IGST or create external ledger entries
+                if (cleanColName === 'jexs' || cleanColName === 'navs') {
+                    if (isGst33OrBlank) {
+                        const halfSum = colSum / 2;
+                        activeLedgers.push({
+                            name: 'CGST',
+                            sum: halfSum
+                        });
+                        activeLedgers.push({
+                            name: 'SGST',
+                            sum: halfSum
+                        });
+                    } else {
+                        activeLedgers.push({
+                            name: 'IGST',
+                            sum: colSum
+                        });
+                    }
+                    totalTaxesAndCharges += colSum;
+                    return;
+                }
+
                 activeLedgers.push({
                     name: normalizedName,
                     sum: colSum
@@ -582,7 +630,7 @@ function generateTallyXML(poGroup, vendorMap = {}) {
         }
     });
 
-    const totalVoucherAmount = totalNetValue + totalTaxesAndCharges;
+    const totalVoucherAmount = totalNetValue + (isZcol ? 0 : totalTaxesAndCharges);
 
     const taxLedgerXML = activeLedgers.map(led => {
         const isDeemedPositive = led.sum > 0 ? 'Yes' : 'No';
@@ -944,9 +992,12 @@ function loadPOMaster() {
         const parentDir = path.resolve(__dirname, '..');
         const files = fs.readdirSync(parentDir);
         for (const file of files) {
-            if (file.toLowerCase().endsWith('.xlsx') && !file.toLowerCase().includes('grn') && !file.toLowerCase().includes('invoice')) {
+            const lower = file.toLowerCase();
+            if (lower.endsWith('.xlsx') && !lower.includes('grn') && !lower.includes('invoice') && !lower.includes('fi data') && !lower.includes('sales') && !lower.includes('book')) {
                 const filePath = path.join(parentDir, file);
                 try {
+                    const stats = fs.statSync(filePath);
+                    if (stats.size > 15 * 1024 * 1024) continue; // Skip files > 15MB to prevent event loop block
                     const workbook = xlsx.readFile(filePath);
                     for (const sheetName of workbook.SheetNames) {
                         if (sheetName.toLowerCase().includes('detail') || sheetName.toLowerCase().includes('sheet')) {
@@ -994,12 +1045,12 @@ function loadPOMaster() {
 
 function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
     const vendors = loadVendorMaster();
-    const poMaster = loadPOMaster();
     const firstRow = purchaseGroup.items[0];
 
-    const rawVoucherNo = getRowValue(firstRow, 'Invoice No') ||
+    const rawVoucherNo = getRowValue(firstRow, 'Document Number') ||
+        getRowValue(firstRow, 'Invoice No') ||
         getRowValue(firstRow, 'Invoice Number') ||
-        getRowValue(firstRow, 'Document Number') ||
+        purchaseGroup.poNumber ||
         '';
     const voucherNumber = escapeXML(String(rawVoucherNo).split('.')[0].trim());
     const reference = escapeXML(String(getRowValue(firstRow, 'Reference')).trim());
@@ -1010,18 +1061,19 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
         getRowValue(firstRow, 'Purchasing Doc. Type') ||
         getRowValue(firstRow, 'PO - Doc Type') ||
         getRowValue(firstRow, 'Doc Type') ||
+        getRowValue(firstRow, 'Purchase Order Type') ||
         ''
     ).trim();
 
-    const poNumberHeader = escapeXML(String(getRowValue(firstRow, 'Purchasing Document') || getRowValue(firstRow, 'Purchase Order') || '').split('.')[0].trim());
-    const headerDocType = firstRowDocType || (poNumberHeader && poMaster[poNumberHeader] ? poMaster[poNumberHeader] : 'ZSPR');
+    const headerDocType = firstRowDocType || 'ZSPR';
     const voucherTypeName = `Purchase ${headerDocType}`;
 
     const rawVendorCode = getRowValue(firstRow, 'Invoicing Party') || getRowValue(firstRow, 'Vendor');
     const vendorCode = padVendor(rawVendorCode);
     const rawVendorName = String(getRowValue(firstRow, 'Vendor Name') || (vendorCode ? (vendorMap[vendorCode] || vendors[vendorCode]?.vendorName || '') : '')).trim();
-    const vendorName = escapeXML(rawVendorName || vendorCode);
-    const partyName = escapeXML(vendorCode ? (rawVendorName ? `${vendorCode}-${rawVendorName}` : vendorCode) : rawVendorName);
+    const finalVendorName = vendorCode ? (rawVendorName ? `${vendorCode}-${rawVendorName}` : vendorCode) : (rawVendorName || 'Unknown Vendor');
+    const vendorName = escapeXML(rawVendorName || vendorCode || 'Unknown Vendor');
+    const partyName = escapeXML(finalVendorName);
 
     const street = String(vendors[vendorCode]?.street || getRowValue(firstRow, 'Street') || '').trim();
     const city = String(vendors[vendorCode]?.city || getRowValue(firstRow, 'City') || '').trim();
@@ -1029,7 +1081,8 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
 
     const postCode = escapeXML(vendors[vendorCode]?.postCode || getRowValue(firstRow, 'Post Code') || '');
     const gstNo = escapeXML(vendors[vendorCode]?.gstNo || getRowValue(firstRow, 'GST NO') || '');
-    const isGst33OrBlank = !gstNo || gstNo.startsWith('33');
+    const destRegion = String(getRowValue(firstRow, 'Destination region') || getRowValue(firstRow, 'Destination Region') || getRowValue(firstRow, 'Region') || '').trim();
+    const isGst33OrBlank = destRegion ? (destRegion === '33' || destRegion.startsWith('33')) : (!gstNo || gstNo.startsWith('33'));
     const regionName = escapeXML(cleanStateName(vendors[vendorCode]?.regionName || getRowValue(firstRow, 'Region Name') || 'Tamil Nadu'));
 
     const cmpState = 'Tamil Nadu';
@@ -1058,12 +1111,17 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
 
     const itemsXML = stockItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Text') || getRowValue(item, 'Short Text');
+        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Text') || getRowValue(item, 'Short Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
+
+        const currency = String(getRowValue(item, 'Currency') || 'INR').trim().toUpperCase();
+        const exRateVal = parseFloat(getRowValue(item, 'Exchange Rate')) || 1;
+        const exchangeRate = (currency !== 'INR' && exRateVal > 0) ? exRateVal : 1;
 
         const qty = parseFloat(getRowValue(item, 'Quantity') || getRowValue(item, 'Qty in OPUn')) || 0;
         const unit = escapeXML(String(getRowValue(item, 'Order Unit') || getRowValue(item, 'Order Price Unit') || getRowValue(item, 'Base Unit of Measure') || 'Nos').trim());
-        const amount = parseFloat(getRowValue(item, 'Amount') || getRowValue(item, 'Total Value')) || 0;
+        let rawAmount = parseFloat(getRowValue(item, 'Amount') || getRowValue(item, 'Total Value')) || 0;
+        const amount = rawAmount * exchangeRate;
         const price = qty > 0 ? (amount / qty) : 0;
 
         totalNetValue += amount;
@@ -1078,8 +1136,9 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
             getRowValue(item, 'Purchasing Doc. Type') ||
             getRowValue(item, 'PO - Doc Type') ||
             getRowValue(item, 'Doc Type') ||
+            getRowValue(firstRow, 'Purchase Order Type') ||
             ''
-        ).trim() || (poNumber && poMaster[poNumber] ? poMaster[poNumber] : headerDocType);
+        ).trim() || headerDocType;
         const ledgerName = `Purchase ${itemDocType}`;
 
         const godownName = escapeXML(String(getRowValue(item, 'Plant') || '1000').split('.')[0].trim());
@@ -1307,9 +1366,6 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
       </LEDGERENTRIES.LIST>`;
     }
 
-    const guid = `81f73e2b-a3c5-4ff2-a56f-${voucherNumber}`;
-    const vchKey = `${guid}:00000000`;
-
     return `<ENVELOPE>
  <HEADER>
   <TALLYREQUEST>Import Data</TALLYREQUEST>
@@ -1324,7 +1380,7 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
    </REQUESTDESC>
    <REQUESTDATA>
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
-     <VOUCHER REMOTEID="${guid}" VCHKEY="${vchKey}" VCHTYPE="${voucherTypeName}" ACTION="Create" OBJVIEW="Invoice Voucher View">
+     <VOUCHER VCHTYPE="${voucherTypeName}" ACTION="Create" OBJVIEW="Invoice Voucher View">
       <ADDRESS.LIST TYPE="String">
        <ADDRESS>${address}</ADDRESS>
       </ADDRESS.LIST>
@@ -1334,7 +1390,6 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
       <DATE>${docDateFormatted}</DATE>
       <REFERENCEDATE>${docDateFormatted}</REFERENCEDATE>
       <VCHSTATUSDATE>${docDateFormatted}</VCHSTATUSDATE>
-      <GUID>${guid}</GUID>
       <GSTREGISTRATIONTYPE>&#4; Unknown</GSTREGISTRATIONTYPE>
       <VOUCHERNUMBER>${voucherNumber}</VOUCHERNUMBER>
       <PARTYLEDGERNAME>${partyName}</PARTYLEDGERNAME>
@@ -1487,12 +1542,15 @@ function loadVendorMaster() {
         const parentDir = path.resolve(__dirname, '..');
         const files = fs.readdirSync(parentDir);
         for (const file of files) {
-            if (file.toLowerCase().endsWith('.xlsx') && !file.toLowerCase().includes('grn')) {
+            const lower = file.toLowerCase();
+            if (lower.endsWith('.xlsx') && !lower.includes('grn') && !lower.includes('fi data') && !lower.includes('sales') && !lower.includes('book')) {
                 const filePath = path.join(parentDir, file);
                 try {
+                    const stats = fs.statSync(filePath);
+                    if (stats.size > 15 * 1024 * 1024) continue; // Skip files > 15MB to prevent event loop block
                     const workbook = xlsx.readFile(filePath);
                     for (const sheetName of workbook.SheetNames) {
-                        if (sheetName.toLowerCase().includes('detail')) {
+                        if (sheetName.toLowerCase().includes('detail') || sheetName.toLowerCase().includes('sheet')) {
                             const sheet = workbook.Sheets[sheetName];
                             const rawGrid = xlsx.utils.sheet_to_json(sheet, { header: 1 });
                             if (rawGrid.length === 0) continue;
@@ -1590,7 +1648,8 @@ function generateGRNTallyXML(grnGroup) {
 
     const postCode = escapeXML(masterVendor.postCode || '');
     const gstNo = escapeXML(masterVendor.gstNo || '');
-    const isGst33OrBlank = !gstNo || gstNo.startsWith('33');
+    const destRegion = String(getRowValue(firstRow, 'Destination region') || getRowValue(firstRow, 'Destination Region') || getRowValue(firstRow, 'Region') || '').trim();
+    const isGst33OrBlank = destRegion ? (destRegion === '33' || destRegion.startsWith('33')) : (!gstNo || gstNo.startsWith('33'));
     const regionName = escapeXML(cleanStateName(masterVendor.regionName || 'Tamil Nadu'));
 
     const cmpState = 'Tamil Nadu';
@@ -1614,7 +1673,7 @@ function generateGRNTallyXML(grnGroup) {
 
     const itemsXML = activeItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
+        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
 
         // Stock Item Name is the material column value (acting as an alias in Tally)
         const stockItemName = escapeXML(getStockItemName(material, shortText));
@@ -1623,8 +1682,10 @@ function generateGRNTallyXML(grnGroup) {
         const unit = escapeXML(String(getRowValue(item, 'Unit of Entry') || getRowValue(item, 'Order Unit') || 'Nos').trim());
 
         // Amount in LC in Excel is tax-inclusive. We divide by 1.18 to get the net amount.
+        // Amount in LC: sending direct Amount in LC for line item without 1.18 division / separate tax
         const amountLC = parseFloat(getRowValue(item, 'Amount in LC')) || 0;
-        const amount = amountLC / 1.18;
+        // const amount = amountLC / 1.18; // commented out
+        const amount = amountLC;
         const price = qty > 0 ? (amount / qty) : 0;
 
         totalNetValue += amount;
@@ -1746,10 +1807,11 @@ function generateGRNTallyXML(grnGroup) {
        </ALLINVENTORYENTRIES.LIST>`;
     }).join('\n');
 
-    // Tax calculation
+    // Tax calculation (commented out to send direct Amount in LC without separate tax ledgers)
     const activeLedgers = [];
     let totalTaxesAndCharges = 0;
 
+    /*
     // CGST/SGST/IGST tax allocation
     // 9% CGST + 9% SGST if local, or 18% IGST if interstate
     const totalTax = totalNetValue * 0.18;
@@ -1770,6 +1832,7 @@ function generateGRNTallyXML(grnGroup) {
         });
     }
     totalTaxesAndCharges += totalTax;
+    */
 
     const totalVoucherAmount = totalNetValue + totalTaxesAndCharges;
 
@@ -2161,10 +2224,9 @@ function generateStockJournalTallyXML(grnGroup) {
     const receivingPlant = escapeXML(String(getRowValue(firstItem, 'Receiving Plant') || getRowValue(firstItem, 'Plant') || '').split('.')[0].trim());
     const cmpState = 'Tamil Nadu';
 
-    // Generate IN inventory entries (deemed positive: Yes)
     const inventoryInXML = transferItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
+        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
 
         const qty = Math.abs(parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0);
@@ -2219,10 +2281,9 @@ function generateStockJournalTallyXML(grnGroup) {
        </INVENTORYENTRIESIN.LIST>`;
     }).join('\n');
 
-    // Generate OUT inventory entries (deemed positive: No)
     const inventoryOutXML = transferItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
+        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
 
         const qty = Math.abs(parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0);
@@ -2820,7 +2881,12 @@ function generateFITallyXML(poGroup) {
     const items = poGroup.items;
     const firstRow = items[0];
 
-    const rawDocType = String(getRowValue(firstRow, 'Doc Type') || 'FI').trim();
+    const rawDocType = String(
+        getRowValue(firstRow, 'Doc Type') ||
+        getRowValue(firstRow, 'Doc type') ||
+        getRowValue(firstRow, 'Document Type') ||
+        'FI'
+    ).trim();
     const voucherTypeName = escapeXML(`Journal ${rawDocType}`);
     const docNumber = String(poGroup.poNumber || getRowValue(firstRow, 'Document Number') || '').split('.')[0].trim();
     // const guid = `81f73e2b-a3c5-4ff2-a56f-50f15ff7c0f6-${docNumber.padStart(8, '0')}-${rawDocType}`;
@@ -2850,21 +2916,18 @@ function generateFITallyXML(poGroup) {
         let isParty = false;
 
         if (accountType === 'K' || (cleanVendor && cleanVendor !== '0' && !cleanGL)) {
-            // Vendor Entry
+            // Vendor Entry: 10-digit padded vendor code only
             const paddedVendor = padVendor(cleanVendor);
-            const vendorName = getRowValue(row, 'Vendor Name') || getRowValue(row, 'Vendor Description') || '';
-            ledgerName = vendorName ? `${paddedVendor}-${String(vendorName).trim()}` : paddedVendor;
+            ledgerName = paddedVendor;
             isParty = true;
         } else if (accountType === 'D' || (cleanCustomer && cleanCustomer !== '0' && !cleanGL)) {
-            // Customer Entry
+            // Customer Entry: 10-digit padded customer code only
             const paddedCustomer = padVendor(cleanCustomer);
-            const custName = getRowValue(row, 'Customer Name') || getRowValue(row, 'Customer Description') || getRowValue(row, 'GST Partner') || '';
-            ledgerName = custName ? `${paddedCustomer}-${String(custName).trim()}` : paddedCustomer;
+            ledgerName = paddedCustomer;
             isParty = true;
         } else if (cleanGL) {
-            // G/L Account / Asset / Material Entry
-            const glName = getRowValue(row, 'G/L Account Description') || getRowValue(row, 'G/L Account Name') || '';
-            ledgerName = glName ? `${cleanGL}-${String(glName).trim()}` : cleanGL;
+            // G/L Account Entry: raw G/L account code only (no suffix)
+            ledgerName = cleanGL;
             isParty = false;
         } else {
             ledgerName = 'Suspense Ledger';
@@ -2875,7 +2938,7 @@ function generateFITallyXML(poGroup) {
             partyLedger = ledgerName;
         }
 
-        const amtVal = parseFloat(getRowValue(row, 'Amount in LC') || getRowValue(row, 'Amount') || 0) || 0;
+        const amtVal = parseFloat(getRowValue(row, 'Amount') || getRowValue(row, 'Amount in LC') || 0) || 0;
         // In Tally XML: Debit is negative (-), Credit is positive (+) in AMOUNT tag when ISDEEMEDPOSITIVE matches
         const tallyAmountFormatted = isCredit ? amtVal.toFixed(2) : (-amtVal).toFixed(2);
 

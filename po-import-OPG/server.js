@@ -5,14 +5,16 @@ const xlsx = require('xlsx');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
-const { generateTallyXML, generateGRNTallyXML, generatePurchaseTallyXML, generateSalesOrderTallyXML, generateFITallyXML, getRowValue, loadPOMaster } = require('./tallyXMLBuilder');
+const { generateTallyXML, generateGRNTallyXML, generatePurchaseTallyXML, generateSalesOrderTallyXML, generateFITallyXML, getRowValue, padVendor } = require('./tallyXMLBuilder');
+const config = require('./config');
 
 const app = express();
-const PORT = process.env.PORT || 5001;
-const TALLY_URL = process.env.TALLY_URL || 'http://localhost:9321';
+const PORT = config.SERVER_PORT;
+const TALLY_URL = config.TALLY_URL;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Set up multer for file uploads
 const upload = multer({ dest: 'uploads/' });
@@ -82,12 +84,17 @@ let globalVendorMap = {};
  * POST /api/upload
  * Takes an Excel sheet, parses the details, and returns grouped Purchase Orders.
  */
-app.post('/api/upload', upload.single('file'), async (req, res) => {
-    if (!req.file) {
+app.post('/api/upload', upload.any(), async (req, res) => {
+    const mainFileObj = (req.files || []).find(f => f.fieldname === 'file') || (req.files && req.files[0]);
+    if (!mainFileObj) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const filePath = req.file.path;
+    const mappingFileObj = (req.files || []).find(f => f.fieldname === 'vendorMappingFile' || f.fieldname === 'vendorMapping' || f.fieldname === 'mappingFile');
+
+    const filePath = mainFileObj.path;
+    const mappingFilePath = mappingFileObj ? mappingFileObj.path : null;
+
     try {
         const importType = String(req.query.importType || req.body.importType || 'po').trim().toLowerCase();
         const isGRN = importType === 'grn';
@@ -95,6 +102,39 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         const isStockJournal = importType === 'stock_journal';
         const isSalesOrder = importType === 'sales_order';
         const isFI = importType === 'fi';
+
+        // Parse optional vendor mapping file
+        const vendorChargeMap = {}; // { [poNumber]: { [itemNumber]: { [condType]: vendorCode } } }
+        if (mappingFilePath) {
+            try {
+                const mapWb = xlsx.readFile(mappingFilePath);
+                cleanupFile(mappingFilePath);
+                const mapSheetName = mapWb.SheetNames[0];
+                const mapRows = xlsx.utils.sheet_to_json(mapWb.Sheets[mapSheetName]);
+                mapRows.forEach(mr => {
+                    const poNum = String(getRowValue(mr, 'PO NUMBER') || getRowValue(mr, 'PO Number') || getRowValue(mr, 'Purchasing Document') || '').trim();
+                    const lineItem = String(getRowValue(mr, 'PO Line Item No') || getRowValue(mr, 'Line Item') || getRowValue(mr, 'Item') || '').trim();
+                    const condType = String(getRowValue(mr, 'Condition type') || getRowValue(mr, 'Condition Type') || '').trim().toUpperCase();
+                    const vendor = String(getRowValue(mr, 'Vendor') || getRowValue(mr, 'Vendor Code') || '').trim();
+
+                    if (poNum && condType && vendor) {
+                        const cleanPo = poNum.split('.')[0].trim();
+                        const cleanItem = lineItem ? lineItem.split('.')[0].trim() : '';
+                        if (!vendorChargeMap[cleanPo]) vendorChargeMap[cleanPo] = {};
+                        if (cleanItem) {
+                            if (!vendorChargeMap[cleanPo][cleanItem]) vendorChargeMap[cleanPo][cleanItem] = {};
+                            vendorChargeMap[cleanPo][cleanItem][condType] = vendor;
+                        } else {
+                            if (!vendorChargeMap[cleanPo]['*']) vendorChargeMap[cleanPo]['*'] = {};
+                            vendorChargeMap[cleanPo]['*'][condType] = vendor;
+                        }
+                    }
+                });
+                console.log(`Loaded vendor mapping file with entries for ${Object.keys(vendorChargeMap).length} POs.`);
+            } catch (err) {
+                console.error('Error reading vendor mapping file:', err);
+            }
+        }
 
         // Read the uploaded excel sheet
         const workbook = xlsx.readFile(filePath);
@@ -122,30 +162,38 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         }
 
         const sheet = workbook.Sheets[detailSheetName];
-        
+
         // Parse sheet to 2D array first to dynamically locate the header row
         const rawGrid = xlsx.utils.sheet_to_json(sheet, { header: 1 });
         cleanupFile(filePath);
 
         // Find the index of the row containing the actual column headers
         let headerRowIndex = -1;
+        const primaryHeaders = ['Purchasing Document', 'Document Number', 'Invoice No', 'Invoice Number', 'Material Document', 'Sales document'];
+        const secondaryHeaders = ['Invoicing Party', 'Vendor'];
+
+        // First pass: look for a row with primary document headers
         for (let i = 0; i < Math.min(rawGrid.length, 50); i++) {
             const row = rawGrid[i];
             if (row && Array.isArray(row)) {
-                const hasHeader = row.some(cell => {
-                    const str = String(cell || '').trim();
-                    return str === 'Purchasing Document' || 
-                           str === 'Document Number' || 
-                           str === 'Invoice No' || 
-                           str === 'Invoice Number' || 
-                           str === 'Material Document' ||
-                           str === 'Sales document' ||
-                           str === 'Invoicing Party' ||
-                           str === 'Vendor';
-                });
-                if (hasHeader) {
+                const hasPrimary = row.some(cell => primaryHeaders.includes(String(cell || '').trim()));
+                if (hasPrimary) {
                     headerRowIndex = i;
                     break;
+                }
+            }
+        }
+
+        // Second pass fallback: look for secondary headers
+        if (headerRowIndex === -1) {
+            for (let i = 0; i < Math.min(rawGrid.length, 50); i++) {
+                const row = rawGrid[i];
+                if (row && Array.isArray(row)) {
+                    const hasSecondary = row.some(cell => secondaryHeaders.includes(String(cell || '').trim()));
+                    if (hasSecondary) {
+                        headerRowIndex = i;
+                        break;
+                    }
                 }
             }
         }
@@ -181,21 +229,37 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
             for (; rowIndex < endIdx; rowIndex++) {
                 const row = rawGrid[rowIndex];
                 if (!row || row.length === 0) continue;
-                
+
                 const obj = {};
                 headers.forEach((header, colIdx) => {
                     if (header) {
                         obj[header] = row[colIdx];
                     }
                 });
+
+                // Attach vendor mappings if available
+                if (Object.keys(vendorChargeMap).length > 0) {
+                    const poNum = String(getRowValue(obj, 'Purchasing Document') || getRowValue(obj, 'PO Number') || getRowValue(obj, 'Document Number') || '').split('.')[0].trim();
+                    const lineItem = String(getRowValue(obj, 'Item') || getRowValue(obj, 'Line Item') || '').split('.')[0].trim();
+                    if (poNum && vendorChargeMap[poNum]) {
+                        obj._chargeVendors = {};
+                        if (vendorChargeMap[poNum]['*']) {
+                            Object.assign(obj._chargeVendors, vendorChargeMap[poNum]['*']);
+                        }
+                        if (lineItem && vendorChargeMap[poNum][lineItem]) {
+                            Object.assign(obj._chargeVendors, vendorChargeMap[poNum][lineItem]);
+                        }
+                    }
+                }
+
                 rawRows.push(obj);
             }
 
-            res.write(JSON.stringify({ 
-                type: 'progress', 
-                message: `Parsed ${rowIndex - (headerRowIndex + 1)} of ${totalRows - (headerRowIndex + 1)} rows`, 
-                rowsParsed: rowIndex - (headerRowIndex + 1), 
-                totalRows: totalRows - (headerRowIndex + 1) 
+            res.write(JSON.stringify({
+                type: 'progress',
+                message: `Parsed ${rowIndex - (headerRowIndex + 1)} of ${totalRows - (headerRowIndex + 1)} rows`,
+                rowsParsed: rowIndex - (headerRowIndex + 1),
+                totalRows: totalRows - (headerRowIndex + 1)
             }) + '\n');
 
             if (rowIndex < totalRows) {
@@ -300,35 +364,41 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                         getRowValue(firstRow, 'Purchasing Doc. Type') ||
                         getRowValue(firstRow, 'PO - Doc Type') ||
                         getRowValue(firstRow, 'Doc Type') ||
+                        getRowValue(firstRow, 'Purchase Order Type') ||
                         ''
                     ).trim();
 
                     if (rawDocType) {
                         docType = rawDocType;
                     } else {
-                        const poNumber = String(getRowValue(firstRow, 'Purchasing Document') || getRowValue(firstRow, 'Purchase Order') || '').split('.')[0].trim();
-                        const poMaster = loadPOMaster();
-                        if (poNumber && poMaster[poNumber]) {
-                            docType = poMaster[poNumber];
-                        } else {
-                            docType = 'ZSPR';
-                        }
+                        docType = 'ZSPR';
                     }
 
                     const rawParty = getRowValue(firstRow, 'Invoicing Party') || getRowValue(firstRow, 'Vendor');
                     const rawVendorName = getRowValue(firstRow, 'Vendor Name') || getRowValue(firstRow, 'Vendor Description');
                     vendorName = rawVendorName ? String(rawVendorName).trim() : (rawParty ? String(rawParty).split('.')[0].trim() : 'Unknown Vendor');
                 } else if (isFI) {
-                    const rawDocType = String(getRowValue(firstRow, 'Doc Type') || 'FI').trim();
+                    const rawDocType = String(
+                        getRowValue(firstRow, 'Doc Type') ||
+                        getRowValue(firstRow, 'Doc type') ||
+                        getRowValue(firstRow, 'Document Type') ||
+                        'FI'
+                    ).trim();
                     docType = rawDocType;
-                    // Vendor priority: Vendor column first, else G/L Account
+                    // Vendor priority: Vendor column first, else Customer, else G/L Account
                     const vendorVal = getRowValue(firstRow, 'Vendor');
+                    const customerVal = getRowValue(firstRow, 'Customer');
                     const glVal = getRowValue(firstRow, 'G/L Account') || getRowValue(firstRow, 'G/L Account_1');
-                    const partyCode = (vendorVal !== undefined && vendorVal !== null && String(vendorVal).trim() !== '' && String(vendorVal).trim() !== '0')
-                        ? String(vendorVal).split('.')[0].trim()
-                        : (glVal ? String(glVal).split('.')[0].trim() : 'Unknown Party');
-                    const vendorDesc = getRowValue(firstRow, 'Vendor Name') || getRowValue(firstRow, 'Vendor Description') || getRowValue(firstRow, 'GST Partner') || getRowValue(firstRow, 'Line Item Desc') || getRowValue(firstRow, 'Text') || '';
-                    vendorName = vendorDesc ? `${partyCode}-${String(vendorDesc).trim()}` : partyCode;
+
+                    if (vendorVal !== undefined && vendorVal !== null && String(vendorVal).trim() !== '' && String(vendorVal).trim() !== '0') {
+                        vendorName = padVendor(vendorVal);
+                    } else if (customerVal !== undefined && customerVal !== null && String(customerVal).trim() !== '' && String(customerVal).trim() !== '0') {
+                        vendorName = padVendor(customerVal);
+                    } else if (glVal) {
+                        vendorName = String(glVal).split('.')[0].trim();
+                    } else {
+                        vendorName = 'Unknown Party';
+                    }
                 } else {
                     docType = String(getRowValue(firstRow, 'Doc Type') || getRowValue(firstRow, 'PO - Doc Type') || getRowValue(firstRow, 'Document Type') || 'ZSPR').trim();
                     vendorName = String(getRowValue(firstRow, 'Vendor Name') || '').trim();
@@ -500,7 +570,7 @@ app.post('/api/import', async (req, res) => {
                     headers: {
                         'Content-Type': 'text/xml; charset=utf-8',
                     },
-                    timeout: 5000 // 5 seconds timeout
+                    timeout: 120000 // 120 seconds (2 minutes) timeout for Tally voucher import
                 });
                 tallyResponse = response.data;
                 tallyParsed = parseTallyResponse(tallyResponse);
@@ -591,22 +661,55 @@ app.post('/api/fetch-from-tally', async (req, res) => {
         res.type('application/xml').send(content);
     } catch (err) {
         console.error('Error fetching data from Tally:', err.message);
-        res.status(500).json({ 
-            error: 'Failed to fetch data from Tally server.', 
+        res.status(500).json({
+            error: 'Failed to fetch data from Tally server.',
             details: err.message,
-            tallyUrl: TALLY_URL 
+            tallyUrl: TALLY_URL
         });
     }
 });
 
-app.get('/api/xml-files', (req, res) => {
+const { TEMPLATES_CONFIG, generateTemplateWorkbook, generateTemplateCSV } = require('./templatesConfig');
+
+app.get('/api/templates/meta', (req, res) => {
     try {
-        const parentPath = path.join(__dirname, '../');
-        const files = fs.readdirSync(parentPath);
-        const xmlFiles = files.filter(f => f.toLowerCase().endsWith('.xml'));
-        res.json({ xmlFiles });
+        res.json(TEMPLATES_CONFIG);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to list XML files', details: err.message });
+        res.status(500).json({ error: 'Failed to get templates metadata', details: err.message });
+    }
+});
+
+app.get('/api/templates/download/:module', (req, res) => {
+    try {
+        const modKey = String(req.params.module || '').toLowerCase().trim();
+        const conf = TEMPLATES_CONFIG[modKey];
+        if (!conf) {
+            return res.status(404).json({ error: `Template module '${modKey}' not found.` });
+        }
+        const buffer = generateTemplateWorkbook(modKey);
+        const filename = `${conf.sheetName}.xlsx`;
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to generate template workbook', details: err.message });
+    }
+});
+
+app.get('/api/templates/csv/:module', (req, res) => {
+    try {
+        const modKey = String(req.params.module || '').toLowerCase().trim();
+        const conf = TEMPLATES_CONFIG[modKey];
+        if (!conf) {
+            return res.status(404).json({ error: `Template module '${modKey}' not found.` });
+        }
+        const csvContent = generateTemplateCSV(modKey);
+        const filename = `${conf.sheetName}.csv`;
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'text/csv');
+        res.send(csvContent);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to generate template CSV', details: err.message });
     }
 });
 

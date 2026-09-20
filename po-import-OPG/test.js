@@ -1,4 +1,5 @@
 const axios = require("axios");
+const config = require("./config");
 
 const fromDate = "20210401"; // YYYYMMDD
 const toDate = "20230430";
@@ -24,7 +25,7 @@ const xmlRequest = `
 </ENVELOPE>
 `;
 
-axios.post("http://localhost:9321", xmlRequest, {
+axios.post(config.TALLY_URL, xmlRequest, {
     headers: {
         "Content-Type": "application/xml"
     }

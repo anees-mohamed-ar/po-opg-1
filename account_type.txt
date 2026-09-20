@@ -1,0 +1,8 @@
+| Account Type | Meaning             | Typical SAP field  | Tally equivalent        |
+| ------------ | ------------------- | ------------------ | ----------------------- |
+| **S**        | G/L Account         | `G/L Account`      | G/L Ledger              |
+| **K**        | Vendor              | `Vendor`           | Supplier/Vendor Ledger  |
+| **D**        | Customer            | `Customer`         | Customer Ledger         |
+| **A**        | Asset               | `Asset`            | Fixed Asset Ledger      |
+| **M**        | Material            | `Material`         | Inventory/Stock-related |
+| **U**        | Unknown / technical | Depends on posting | Need to inspect         |
