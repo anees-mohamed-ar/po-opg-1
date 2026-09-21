@@ -743,7 +743,7 @@ function XmlVisualizer() {
       <div className="tally-register-container" style={{ marginBottom: '1.5rem', borderRadius: '0 0 var(--radius) var(--radius)' }}>
         <div className="tally-register-window-header">
           <span className="window-title">Voucher Register</span>
-          <span className="window-company">Opg Legacy Data Apr-Dec(2023)</span>
+          <span className="window-company">Opg Legacy Data 22-23</span>
           <span className="window-close-btn">&times;</span>
         </div>
         <div className="tally-register-subheader">

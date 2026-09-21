@@ -533,19 +533,38 @@ function generateTallyXML(poGroup, vendorMap = {}) {
 
     ledgerColumns.forEach(col => {
         let colSum = 0;
-        activeItems.forEach(item => {
-            const rawVal = getRowValue(item, col);
-            if (rawVal !== undefined && rawVal !== null) {
-                const cleanVal = String(rawVal).replace(/,/g, '').trim();
-                colSum += parseFloat(cleanVal) || 0;
-            }
-        });
+        const condCode = getConditionCode(col);
+
+        // Check if any active item has charge values from the vendor mapping file for this condition type.
+        // The mapping file provides INR-converted values (Condition value * Cond.exchange rate for non-INR).
+        const hasVendorMappedValues = activeItems.some(item =>
+            item._chargeValues && item._chargeValues[condCode] !== undefined
+        );
+
+        if (hasVendorMappedValues) {
+            // Sum the INR-converted condition values from the mapping file across all items
+            activeItems.forEach(item => {
+                if (item._chargeValues && item._chargeValues[condCode] !== undefined) {
+                    colSum += item._chargeValues[condCode];
+                }
+            });
+        } else {
+            // Fall back: sum the column values from the main PO excel (no exchange rate here;
+            // exchange rate for PO line items is handled separately in the inventory section)
+            activeItems.forEach(item => {
+                const rawVal = getRowValue(item, col);
+                if (rawVal !== undefined && rawVal !== null) {
+                    const cleanVal = String(rawVal).replace(/,/g, '').trim();
+                    colSum += parseFloat(cleanVal) || 0;
+                }
+            });
+        }
+
 
         if (Math.abs(colSum) > 0.001) {
             const cleanColName = col.toLowerCase().replace(/\s/g, '');
 
             const exactKey = getExactKey(firstRow, col);
-            const condCode = getConditionCode(col);
             const mappedName = condMap[condCode];
 
             const finalLedgerName = mappedName ? mappedName : exactKey.toString().replace(/\s+/g, ' ').trim();
@@ -1673,7 +1692,7 @@ function generateGRNTallyXML(grnGroup) {
 
     const itemsXML = activeItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
+        const shortText = getRowValue(item, 'New Material Desc') || getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
 
         // Stock Item Name is the material column value (acting as an alias in Tally)
         const stockItemName = escapeXML(getStockItemName(material, shortText));
@@ -2226,7 +2245,7 @@ function generateStockJournalTallyXML(grnGroup) {
 
     const inventoryInXML = transferItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
+        const shortText = getRowValue(item, 'New Material Desc') || getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
 
         const qty = Math.abs(parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0);
@@ -2283,7 +2302,7 @@ function generateStockJournalTallyXML(grnGroup) {
 
     const inventoryOutXML = transferItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
+        const shortText = getRowValue(item, 'New Material Desc') || getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
 
         const qty = Math.abs(parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0);

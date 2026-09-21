@@ -104,29 +104,54 @@ app.post('/api/upload', upload.any(), async (req, res) => {
         const isFI = importType === 'fi';
 
         // Parse optional vendor mapping file
-        const vendorChargeMap = {}; // { [poNumber]: { [itemNumber]: { [condType]: vendorCode } } }
+        // Supports new format: PO NO, ItemNo, Condition type, Currency, Cond.exchange rate, Vendor, Condition value
+        // vendorChargeMap: { [poNumber]: { [itemNumber]: { [condType]: { vendor, conditionValueINR } } } }
+        const vendorChargeMap = {};
         if (mappingFilePath) {
             try {
                 const mapWb = xlsx.readFile(mappingFilePath);
                 cleanupFile(mappingFilePath);
+                // Prefer the first sheet; 'IMATRIX-VENDOR -CONDITION TYPE' or 'Vendor with values' – both have same structure
                 const mapSheetName = mapWb.SheetNames[0];
                 const mapRows = xlsx.utils.sheet_to_json(mapWb.Sheets[mapSheetName]);
                 mapRows.forEach(mr => {
-                    const poNum = String(getRowValue(mr, 'PO NUMBER') || getRowValue(mr, 'PO Number') || getRowValue(mr, 'Purchasing Document') || '').trim();
-                    const lineItem = String(getRowValue(mr, 'PO Line Item No') || getRowValue(mr, 'Line Item') || getRowValue(mr, 'Item') || '').trim();
+                    // Support both old (PO NUMBER / PO Number / Purchasing Document) and new (PO NO) column names
+                    const poNum = String(
+                        getRowValue(mr, 'PO NO') || getRowValue(mr, 'PO NUMBER') ||
+                        getRowValue(mr, 'PO Number') || getRowValue(mr, 'Purchasing Document') || ''
+                    ).trim();
+                    // Support both old (PO Line Item No / Line Item / Item) and new (ItemNo) column names
+                    const lineItem = String(
+                        getRowValue(mr, 'ItemNo') || getRowValue(mr, 'PO Line Item No') ||
+                        getRowValue(mr, 'Line Item') || getRowValue(mr, 'Item') || ''
+                    ).trim();
                     const condType = String(getRowValue(mr, 'Condition type') || getRowValue(mr, 'Condition Type') || '').trim().toUpperCase();
                     const vendor = String(getRowValue(mr, 'Vendor') || getRowValue(mr, 'Vendor Code') || '').trim();
+
+                    // New: read condition value with currency conversion
+                    const rawCondValue = parseFloat(
+                        String(getRowValue(mr, 'Condition value') || getRowValue(mr, 'Condition Value') || '0').replace(/,/g, '')
+                    ) || 0;
+                    const currency = String(getRowValue(mr, 'Currency') || 'INR').trim().toUpperCase();
+                    const rawExRate = parseFloat(
+                        String(getRowValue(mr, 'Cond.exchange rate') || getRowValue(mr, 'Exchange Rate') || '1').replace(/,/g, '')
+                    ) || 1;
+                    // Convert to INR: if not INR, multiply by exchange rate
+                    const conditionValueINR = (currency !== 'INR' && rawExRate > 0)
+                        ? rawCondValue * rawExRate
+                        : rawCondValue;
 
                     if (poNum && condType && vendor) {
                         const cleanPo = poNum.split('.')[0].trim();
                         const cleanItem = lineItem ? lineItem.split('.')[0].trim() : '';
                         if (!vendorChargeMap[cleanPo]) vendorChargeMap[cleanPo] = {};
+                        const entry = { vendor, conditionValueINR };
                         if (cleanItem) {
                             if (!vendorChargeMap[cleanPo][cleanItem]) vendorChargeMap[cleanPo][cleanItem] = {};
-                            vendorChargeMap[cleanPo][cleanItem][condType] = vendor;
+                            vendorChargeMap[cleanPo][cleanItem][condType] = entry;
                         } else {
                             if (!vendorChargeMap[cleanPo]['*']) vendorChargeMap[cleanPo]['*'] = {};
-                            vendorChargeMap[cleanPo]['*'][condType] = vendor;
+                            vendorChargeMap[cleanPo]['*'][condType] = entry;
                         }
                     }
                 });
@@ -238,17 +263,33 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                 });
 
                 // Attach vendor mappings if available
+                // _chargeVendors: { [condType]: vendorCode }  (string, for XML builder)
+                // _chargeValues:  { [condType]: conditionValueINR } (number, INR-converted)
                 if (Object.keys(vendorChargeMap).length > 0) {
-                    const poNum = String(getRowValue(obj, 'Purchasing Document') || getRowValue(obj, 'PO Number') || getRowValue(obj, 'Document Number') || '').split('.')[0].trim();
+                    const poNum = String(
+                        getRowValue(obj, 'Purchasing Document') || getRowValue(obj, 'PO Number') ||
+                        getRowValue(obj, 'Document Number') || ''
+                    ).split('.')[0].trim();
                     const lineItem = String(getRowValue(obj, 'Item') || getRowValue(obj, 'Line Item') || '').split('.')[0].trim();
                     if (poNum && vendorChargeMap[poNum]) {
                         obj._chargeVendors = {};
-                        if (vendorChargeMap[poNum]['*']) {
-                            Object.assign(obj._chargeVendors, vendorChargeMap[poNum]['*']);
-                        }
-                        if (lineItem && vendorChargeMap[poNum][lineItem]) {
-                            Object.assign(obj._chargeVendors, vendorChargeMap[poNum][lineItem]);
-                        }
+                        obj._chargeValues = {};
+                        // First apply wildcard (*) entries, then item-specific (overrides wildcard)
+                        const applyEntries = (map) => {
+                            for (const [condType, entry] of Object.entries(map)) {
+                                if (typeof entry === 'object' && entry !== null && 'vendor' in entry) {
+                                    // New format: { vendor, conditionValueINR }
+                                    obj._chargeVendors[condType] = entry.vendor;
+                                    // Add condition values (accumulate per item for multi-item POs)
+                                    obj._chargeValues[condType] = (obj._chargeValues[condType] || 0) + entry.conditionValueINR;
+                                } else {
+                                    // Old format (plain string vendor code — backwards compat)
+                                    obj._chargeVendors[condType] = entry;
+                                }
+                            }
+                        };
+                        if (vendorChargeMap[poNum]['*']) applyEntries(vendorChargeMap[poNum]['*']);
+                        if (lineItem && vendorChargeMap[poNum][lineItem]) applyEntries(vendorChargeMap[poNum][lineItem]);
                     }
                 }
 
