@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from './config';
 
 function DayBookVisualizer() {
   const [xmlText, setXmlText] = useState('');
@@ -15,7 +16,7 @@ function DayBookVisualizer() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://192.168.1.166:5001/api/daybook-xml');
+      const response = await fetch(`${API_BASE}/api/daybook-xml`);
       if (!response.ok) {
         throw new Error(`Failed to fetch DayBook XML (Status: ${response.status})`);
       }

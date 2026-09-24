@@ -87,14 +87,14 @@ const TEMPLATES_CONFIG = {
         title: 'Goods Receipt Note (GRN)',
         sheetName: 'GRN_Template',
         originalTotalCols: 28,
-        description: 'Template for Goods Receipt Notes (WE movement type). Rows with Trans./Event Type = WE and a valid Vendor are imported as Receipt Notes in Tally. Rows with ZSTO PO type are excluded.',
+        description: 'Template for Goods Receipt Notes (WE movement type). Rows with Trans./Event Type = WE and a valid Vendor are imported as Receipt Notes in Tally.',
         columns: [
             { name: 'Trans./Event Type', required: true, sample: 'WE', description: "Must be 'WE' for Goods Receipt. Rows with 'WA' are treated as Stock Journal transfers and ignored here." },
             { name: 'Material Document', required: true, sample: '5000548667', description: 'GRN Material Document number — used as Voucher Number in Tally' },
             { name: 'Document Date', required: true, sample: '01.04.2023', description: 'GRN Document Date (DD.MM.YYYY)' },
             { name: 'Posting Date', required: true, sample: '01.04.2023', description: 'GRN Posting Date' },
             { name: 'Purchase Order', required: true, sample: '4500003396', description: 'Reference Purchase Order Number — linked in Tally as Reference' },
-            { name: 'Purchase Order type', required: false, sample: 'ZSPR', description: "PO type — rows with 'ZSTO' are automatically excluded from import" },
+            { name: 'Purchase Order type', required: false, sample: 'ZSPR', description: 'PO / Doc Type (e.g. ZSPR, ZSTO) — used in Tally Voucher Type & Ledger name' },
             { name: 'Vendor', required: true, sample: '11075', description: 'Vendor code — rows without a Vendor are excluded; used to look up vendor details from master' },
             { name: 'Vendor Description', required: true, sample: 'Industrial Aids & Packings', description: 'Vendor name (fallback if not found in vendor master)' },
             { name: 'Deletion Indicator', required: true, sample: '', description: "Set to 'L' if line is cancelled; leave blank otherwise" },
@@ -113,8 +113,9 @@ const TEMPLATES_CONFIG = {
         description: 'Template for Purchase Invoices. Stock item rows must have blank Condition Type; charge rows (freight, tax, etc.) must have a Condition Type code.',
         columns: [
             // --- Header / Grouping ---
-            { name: 'Document Number', required: true, sample: '5105646126', description: 'SAP Invoice Document Number — all rows with same Document Number form one Tally Purchase voucher' },
+            { name: 'Invoice No', required: true, sample: '5105646126', description: 'SAP Invoice Document Number / Invoice No — all rows with same number form one Tally Purchase voucher' },
             { name: 'Posting Date', required: true, sample: '01.04.2023', description: 'Invoice Posting Date (DD.MM.YYYY)' },
+            { name: 'Doc Date', required: false, sample: '01.04.2023', description: 'Document Date (DD.MM.YYYY)' },
             { name: 'Reference', required: true, sample: 'INV-2023-0091', description: "Vendor's actual invoice / bill number" },
             { name: 'Purchasing Doc Type', required: true, sample: 'ZCON', description: 'PO Document Type (e.g. ZCON, ZSPR) — determines Purchase ledger name in Tally' },
             { name: 'Invoicing Party', required: true, sample: '60105', description: 'Vendor / Invoicing party code — used as Party Ledger in Tally (10-digit padded)' },
@@ -210,6 +211,29 @@ const TEMPLATES_CONFIG = {
             { name: 'Qty in Un. of Entry', required: true, sample: 50, description: 'Quantity transferred (only positive-quantity rows are processed)' },
             { name: 'Unit of Entry', required: true, sample: 'NOS', description: 'Unit of measurement' },
             { name: 'Amount in LC', required: true, sample: 2625.00, description: 'Valuation amount in local currency (INR)' }
+        ]
+    },
+    delivery_note: {
+        id: 'delivery_note',
+        title: 'Delivery Note (WL)',
+        sheetName: 'DeliveryNote_Template',
+        originalTotalCols: 30,
+        description: 'Template for Goods Issue / Delivery Notes (WL Trans./Event Type). Imported as Delivery Note vouchers in Tally.',
+        columns: [
+            { name: 'Trans./Event Type', required: true, sample: 'WL', description: "Must be 'WL' for delivery note entries" },
+            { name: 'Material Document', required: true, sample: '4900630047', description: 'Delivery Note Material Document Number — used as Voucher Number in Tally' },
+            { name: 'Document Date', required: false, sample: '01.04.2021', description: 'Document date (DD.MM.YYYY)' },
+            { name: 'Posting Date', required: true, sample: '01.04.2021', description: 'Posting date of the delivery note' },
+            { name: 'Customer', required: true, sample: '379', description: 'Customer account code — used as Party Ledger (padded to 10 digits)' },
+            { name: 'Goods recipient', required: false, sample: '0000000379', description: 'Goods recipient customer code' },
+            { name: 'Material', required: true, sample: 'FLYASH', description: 'Material / stock item code' },
+            { name: 'Material Desc', required: false, sample: 'FLYASH', description: 'Material description' },
+            { name: 'Plant', required: true, sample: '1000', description: 'Issuing plant / godown code in Tally' },
+            { name: 'Qty in Un. of Entry', required: true, sample: 22.21, description: 'Billed / delivered quantity' },
+            { name: 'Unit of Entry', required: true, sample: 'MT', description: 'Unit of measure (e.g. MT, NOS)' },
+            { name: 'Amount in LC', required: true, sample: 2221.00, description: 'Total item amount in local currency (INR)' },
+            { name: 'Reference', required: false, sample: '0080040913', description: 'Outbound Delivery reference number' },
+            { name: 'Destination region', required: false, sample: '33', description: 'State code (e.g. 33 for Tamil Nadu)' }
         ]
     }
 };

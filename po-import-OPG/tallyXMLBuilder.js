@@ -362,7 +362,12 @@ function generateTallyXML(poGroup, vendorMap = {}) {
 
     const itemsXML = activeItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
+        const shortText = getRowValue(item, 'Purchase Order Text') ||
+            getRowValue(item, 'Material Description') ||
+            getRowValue(item, 'Purchase Order Line Item Text') ||
+            getRowValue(item, 'Purchase Order - Short Text') ||
+            getRowValue(item, 'Short Text') ||
+            getRowValue(item, 'Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
 
         const currency = String(getRowValue(item, 'Currency') || 'INR').trim().toUpperCase();
@@ -1130,7 +1135,12 @@ function generatePurchaseTallyXML(purchaseGroup, vendorMap = {}) {
 
     const itemsXML = stockItems.map(item => {
         const material = getRowValue(item, 'Material');
-        const shortText = getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Text') || getRowValue(item, 'Short Text');
+        const shortText = getRowValue(item, 'Purchase Order Text') ||
+            getRowValue(item, 'Material Description') ||
+            getRowValue(item, 'Purchase Order Line Item Text') ||
+            getRowValue(item, 'Purchase Order - Short Text') ||
+            getRowValue(item, 'Text') ||
+            getRowValue(item, 'Short Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
 
         const currency = String(getRowValue(item, 'Currency') || 'INR').trim().toUpperCase();
@@ -1674,9 +1684,20 @@ function generateGRNTallyXML(grnGroup) {
     const cmpState = 'Tamil Nadu';
     const isLocal = regionName.toLowerCase().replace(/\s/g, '') === cmpState.toLowerCase().replace(/\s/g, '');
 
-    // Determine Voucher Type
-    // Trans./Event Type column: if "WE", type is "Receipt Note WS", else "Receipt Note"
-    const voucherType = `Receipt Note ${eventType}`;
+    // Extract Doc Type from GRN row
+    const rawDocType = String(
+        getRowValue(firstRow, 'Doc Type') ||
+        getRowValue(firstRow, 'Doc. Type') ||
+        getRowValue(firstRow, 'Document Type') ||
+        getRowValue(firstRow, 'Purchase Order type') ||
+        getRowValue(firstRow, 'PO Type') ||
+        getRowValue(firstRow, 'Purchasing Doc Type') ||
+        ''
+    ).trim();
+    const docType = rawDocType || 'ZSPR';
+
+    // Determine Voucher Type: Receipt Note WE <DocType> (e.g. Receipt Note WE ZSPR, Receipt Note WE ZSTO)
+    const voucherType = docType ? `Receipt Note ${eventType} ${docType}` : `Receipt Note ${eventType}`;
 
     // Group totals
     let totalNetValue = 0;
@@ -1713,10 +1734,17 @@ function generateGRNTallyXML(grnGroup) {
         const amountFormatted = `-${amount.toFixed(2)}`;
         const qtyFormatted = ` ${formatQuantity(qty)} ${unit}`;
 
-        // For GRN, ledger name is Purchase ZSPR (or Purchase Doc Type if we can determine Doc Type)
-        // Since we don't have Doc Type in GRN Excel, we default it to ZSPR
-        const docType = 'ZSPR';
-        const ledgerName = `Purchase ${docType}`;
+        // For GRN, ledger name is Purchase <DocType>
+        const itemDocType = String(
+            getRowValue(item, 'Doc Type') ||
+            getRowValue(item, 'Doc. Type') ||
+            getRowValue(item, 'Document Type') ||
+            getRowValue(item, 'Purchase Order type') ||
+            getRowValue(item, 'PO Type') ||
+            getRowValue(item, 'Purchasing Doc Type') ||
+            docType
+        ).trim();
+        const ledgerName = `Purchase ${itemDocType}`;
 
         const poNumber = escapeXML(String(getRowValue(item, 'Purchase Order') || '').split('.')[0].trim());
 
@@ -2219,6 +2247,24 @@ function generateStockJournalTallyXML(grnGroup) {
     const grnNumber = escapeXML(String(getRowValue(firstRow, 'Material Document') || '').split('.')[0].trim());
     const docDateFormatted = formatDate(getRowValue(firstRow, 'Document Date') || getRowValue(firstRow, 'Posting Date'));
 
+    // Extract event/trans type (e.g. WA)
+    const eventType = String(getRowValue(firstRow, 'Trans./Event Type') || getRowValue(firstRow, 'Trans./Event TypeA') || 'WA').trim().toUpperCase();
+
+    // Extract Doc Type from row
+    const rawDocType = String(
+        getRowValue(firstRow, 'Doc Type') ||
+        getRowValue(firstRow, 'Doc. Type') ||
+        getRowValue(firstRow, 'Document Type') ||
+        getRowValue(firstRow, 'Purchase Order type') ||
+        getRowValue(firstRow, 'PO Type') ||
+        getRowValue(firstRow, 'Purchasing Doc Type') ||
+        ''
+    ).trim();
+    const docType = rawDocType || '';
+
+    // Determine Voucher Type: Stock Journal <TransType> <DocType> (e.g. Stock Journal WA ZSTO)
+    const voucherType = docType ? `Stock Journal ${eventType} ${docType}` : `Stock Journal ${eventType}`;
+
     const activeItems = grnGroup.items.filter(item => {
         const delInd = getRowValue(item, 'Deletion Indicator');
         return !(delInd && String(delInd).trim().toUpperCase() === 'L');
@@ -2228,22 +2274,53 @@ function generateStockJournalTallyXML(grnGroup) {
         return '';
     }
 
-    // Filter to only positive items to avoid duplicate processing of the negative pair row
-    let transferItems = activeItems.filter(item => {
-        const qty = parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0;
-        return qty > 0;
-    });
+    const isWEZSTO = eventType === 'WE' && docType === 'ZSTO';
 
-    // Fallback if no positive items are found (e.g. data anomaly)
-    if (transferItems.length === 0) {
-        transferItems = activeItems;
+    let inItems = [];
+    let outItems = [];
+
+    if (isWEZSTO) {
+        // For WE ZSTO (Single plant-to-plant transfer row)
+        inItems = activeItems;
+        outItems = activeItems;
+    } else {
+        // For WA Stock Journals:
+        // Use 'Debit/Credit Ind.': 'S' is Debit (Incoming / Production), 'H' is Credit (Outgoing / Consumption)
+        const sItems = activeItems.filter(item => {
+            const dc = String(getRowValue(item, 'Debit/Credit Ind.') || getRowValue(item, 'Debit/Credit') || '').trim().toUpperCase();
+            return dc === 'S';
+        });
+        const hItems = activeItems.filter(item => {
+            const dc = String(getRowValue(item, 'Debit/Credit Ind.') || getRowValue(item, 'Debit/Credit') || '').trim().toUpperCase();
+            return dc === 'H';
+        });
+
+        if (sItems.length > 0 && hItems.length > 0) {
+            inItems = sItems;
+            outItems = hItems;
+        } else if (sItems.length > 0) {
+            inItems = sItems;
+            outItems = activeItems.filter(item => !sItems.includes(item));
+            if (outItems.length === 0) outItems = sItems;
+        } else if (hItems.length > 0) {
+            outItems = hItems;
+            inItems = activeItems.filter(item => !hItems.includes(item));
+            if (inItems.length === 0) inItems = hItems;
+        } else {
+            // Fallback: pair by positive/negative or split
+            inItems = activeItems.filter(item => (parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0) > 0);
+            outItems = activeItems.filter(item => (parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0) < 0);
+            if (inItems.length === 0) inItems = activeItems;
+            if (outItems.length === 0) outItems = activeItems;
+        }
     }
 
-    const firstItem = transferItems[0];
-    const receivingPlant = escapeXML(String(getRowValue(firstItem, 'Receiving Plant') || getRowValue(firstItem, 'Plant') || '').split('.')[0].trim());
+    // Header destination godown (from the first incoming item)
+    const firstInItem = inItems[0] || activeItems[0];
+    const destinationGodown = escapeXML(String(getRowValue(firstInItem, 'Plant') || getRowValue(firstInItem, 'Receiving Plant') || '').split('.')[0].trim());
     const cmpState = 'Tamil Nadu';
 
-    const inventoryInXML = transferItems.map(item => {
+    const inventoryInXML = inItems.map(item => {
         const material = getRowValue(item, 'Material');
         const shortText = getRowValue(item, 'New Material Desc') || getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
@@ -2256,7 +2333,7 @@ function generateStockJournalTallyXML(grnGroup) {
         const rateFormatted = `${price.toFixed(2)}/${unit}`;
         const amountFormatted = `-${amount.toFixed(2)}`;
         const qtyFormatted = ` ${formatQuantity(qty)} ${unit}`;
-        const destGodown = escapeXML(String(getRowValue(item, 'Receiving Plant') || '').split('.')[0].trim() || receivingPlant);
+        const inGodown = escapeXML(String(getRowValue(item, 'Plant') || destinationGodown).split('.')[0].trim());
 
         return `       <INVENTORYENTRIESIN.LIST>
         <STOCKITEMNAME>${stockItemName}</STOCKITEMNAME>
@@ -2276,9 +2353,9 @@ function generateStockJournalTallyXML(grnGroup) {
         <ACTUALQTY>${qtyFormatted}</ACTUALQTY>
         <BILLEDQTY>${qtyFormatted}</BILLEDQTY>
         <BATCHALLOCATIONS.LIST>
-         <GODOWNNAME>${destGodown}</GODOWNNAME>
+         <GODOWNNAME>${inGodown}</GODOWNNAME>
          <BATCHNAME>Primary Batch</BATCHNAME>
-         <DESTINATIONGODOWNNAME>${destGodown}</DESTINATIONGODOWNNAME>
+         <DESTINATIONGODOWNNAME>${inGodown}</DESTINATIONGODOWNNAME>
          <INDENTNO>&#4; Not Applicable</INDENTNO>
          <ORDERNO>&#4; Not Applicable</ORDERNO>
          <TRACKINGNUMBER>&#4; Not Applicable</TRACKINGNUMBER>
@@ -2300,7 +2377,7 @@ function generateStockJournalTallyXML(grnGroup) {
        </INVENTORYENTRIESIN.LIST>`;
     }).join('\n');
 
-    const inventoryOutXML = transferItems.map(item => {
+    const inventoryOutXML = outItems.map(item => {
         const material = getRowValue(item, 'Material');
         const shortText = getRowValue(item, 'New Material Desc') || getRowValue(item, 'Material Description') || getRowValue(item, 'Purchase Order Line Item Text') || getRowValue(item, 'Purchase Order - Short Text') || getRowValue(item, 'Short Text') || getRowValue(item, 'Text');
         const stockItemName = escapeXML(getStockItemName(material, shortText));
@@ -2313,7 +2390,7 @@ function generateStockJournalTallyXML(grnGroup) {
         const rateFormatted = `${price.toFixed(2)}/${unit}`;
         const amountFormatted = `${amount.toFixed(2)}`;
         const qtyFormatted = ` ${formatQuantity(qty)} ${unit}`;
-        const sourceGodown = escapeXML(String(getRowValue(item, 'Plant') || '').split('.')[0].trim());
+        const outGodown = escapeXML(String(getRowValue(item, 'Plant') || '').split('.')[0].trim());
 
         return `       <INVENTORYENTRIESOUT.LIST>
         <STOCKITEMNAME>${stockItemName}</STOCKITEMNAME>
@@ -2333,7 +2410,7 @@ function generateStockJournalTallyXML(grnGroup) {
         <ACTUALQTY>${qtyFormatted}</ACTUALQTY>
         <BILLEDQTY>${qtyFormatted}</BILLEDQTY>
         <BATCHALLOCATIONS.LIST>
-         <GODOWNNAME>${sourceGodown}</GODOWNNAME>
+         <GODOWNNAME>${outGodown}</GODOWNNAME>
          <BATCHNAME>Primary Batch</BATCHNAME>
          <INDENTNO>&#4; Not Applicable</INDENTNO>
          <ORDERNO>&#4; Not Applicable</ORDERNO>
@@ -2373,7 +2450,7 @@ function generateStockJournalTallyXML(grnGroup) {
    </REQUESTDESC>
    <REQUESTDATA>
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
-     <VOUCHER REMOTEID="${remoteId}" VCHKEY="${vchKey}" VCHTYPE="Stock Journal" ACTION="Create" OBJVIEW="Consumption Voucher View">
+     <VOUCHER REMOTEID="${remoteId}" VCHKEY="${vchKey}" VCHTYPE="${voucherType}" ACTION="Create" OBJVIEW="Consumption Voucher View">
       <OLDAUDITENTRYIDS.LIST TYPE="Number">
        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
       </OLDAUDITENTRYIDS.LIST>
@@ -2382,7 +2459,7 @@ function generateStockJournalTallyXML(grnGroup) {
       <GUID>${remoteId}</GUID>
       <OBJECTUPDATEACTION>Alter</OBJECTUPDATEACTION>
       <GSTREGISTRATION>&#4; Not Applicable</GSTREGISTRATION>
-      <VOUCHERTYPENAME>Stock Journal</VOUCHERTYPENAME>
+      <VOUCHERTYPENAME>${voucherType}</VOUCHERTYPENAME>
       <VOUCHERNUMBER>${grnNumber}</VOUCHERNUMBER>
       <NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
       <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>
@@ -2390,10 +2467,10 @@ function generateStockJournalTallyXML(grnGroup) {
       <FBTPAYMENTTYPE>Default</FBTPAYMENTTYPE>
       <PERSISTEDVIEW>Consumption Voucher View</PERSISTEDVIEW>
       <VCHSTATUSTAXADJUSTMENT>Default</VCHSTATUSTAXADJUSTMENT>
-      <VCHSTATUSVOUCHERTYPE>Stock Journal</VCHSTATUSVOUCHERTYPE>
+      <VCHSTATUSVOUCHERTYPE>${voucherType}</VCHSTATUSVOUCHERTYPE>
       <VCHGSTCLASS>&#4; Not Applicable</VCHGSTCLASS>
       <VCHENTRYMODE>Use for Stock Journal</VCHENTRYMODE>
-      <DESTINATIONGODOWN>${receivingPlant}</DESTINATIONGODOWN>
+      <DESTINATIONGODOWN>${destinationGodown}</DESTINATIONGODOWN>
       <DIFFACTUALQTY>No</DIFFACTUALQTY>
       <ISMSTFROMSYNC>No</ISMSTFROMSYNC>
       <ISDELETED>No</ISDELETED>
@@ -3082,6 +3159,306 @@ ${ledgerEntriesXML}
 </ENVELOPE>`;
 }
 
+/**
+ * Generate Tally XML for Delivery Note (WL Trans./Event Type)
+ * Voucher Type Name: "Delivery Note WL"
+ */
+function generateDeliveryNoteTallyXML(deliveryGroup, vendorMap = {}) {
+    if (!deliveryGroup || !deliveryGroup.items || deliveryGroup.items.length === 0) {
+        throw new Error('No items in Delivery Note group');
+    }
+
+    const items = deliveryGroup.items;
+    const firstRow = items[0];
+
+    const rawDocNum = deliveryGroup.poNumber || getRowValue(firstRow, 'Material Document') || '';
+    const voucherNumber = escapeXML(String(rawDocNum).split('.')[0].trim());
+
+    const voucherTypeName = 'Delivery Note WL';
+
+    const rawPostingDate = getRowValue(firstRow, 'Posting Date') || getRowValue(firstRow, 'Document Date');
+    const docDateFormatted = formatDate(rawPostingDate);
+
+    // Customer Party ledger lookup - use "Goods recipient" column directly
+    const rawGoodsRecipient = getRowValue(firstRow, 'Goods recipient') || getRowValue(firstRow, 'Customer') || '';
+    const customerCode = padVendor(rawGoodsRecipient);
+    const partyLedger = escapeXML(customerCode || 'Unknown Customer');
+    const vendors = typeof loadVendorMaster === 'function' ? loadVendorMaster() : {};
+
+    const street = String(vendors[customerCode]?.street || getRowValue(firstRow, 'Street') || '').trim();
+    const city = String(vendors[customerCode]?.city || getRowValue(firstRow, 'City') || '').trim();
+    const address = escapeXML(street && city ? `${street},,,${city}` : (street || city || ''));
+
+    const postCode = escapeXML(vendors[customerCode]?.postCode || String(getRowValue(firstRow, 'Post Code') || '').trim());
+    const gstNo = escapeXML(vendors[customerCode]?.gstNo || String(getRowValue(firstRow, 'GST NO') || '').trim());
+    const regionName = escapeXML(cleanStateName(vendors[customerCode]?.regionName || getRowValue(firstRow, 'Region Name') || 'Tamil Nadu'));
+    const cmpState = 'Tamil Nadu';
+
+    let totalVoucherAmount = 0;
+
+    const inventoryEntriesXML = items.map(item => {
+        const rawMaterial = String(getRowValue(item, 'Material') || '').trim();
+        const stockItemName = rawMaterial || (String(getRowValue(item, 'Material Desc') || '').trim() || 'FLYASH');
+
+        const plant = escapeXML(String(getRowValue(item, 'Plant') || '1000').split('.')[0].trim());
+
+        const qtyNum = parseFloat(getRowValue(item, 'Qty in Un. of Entry') || getRowValue(item, 'Quantity') || 0) || 0;
+        const uom = escapeXML(String(getRowValue(item, 'Unit of Entry') || getRowValue(item, 'Base Unit of Measure') || 'MT').trim());
+        const qtyFormatted = ` ${formatQuantity(qtyNum)} ${uom}`;
+
+        // Amount in LC is the line amount
+        const lineAmt = parseFloat(getRowValue(item, 'Amount in LC') || getRowValue(item, 'Amount') || 0) || 0;
+        totalVoucherAmount += lineAmt;
+
+        const rate = qtyNum > 0 ? (lineAmt / qtyNum) : 0;
+        const rateFormatted = `${rate.toFixed(2)}/${uom}`;
+        const amountFormatted = lineAmt.toFixed(2);
+
+        // Sales / Stock Ledger Name: e.g. "Flyash Sales" if FLYASH, or "Coal Sales" if COAL, or generic Sales
+        let salesLedger = 'Flyash Sales';
+        if (rawMaterial.toUpperCase().includes('COAL')) {
+            salesLedger = 'Coal Sales';
+        }
+
+        return `       <ALLINVENTORYENTRIES.LIST>
+        <STOCKITEMNAME>${escapeXML(stockItemName)}</STOCKITEMNAME>
+        <GSTOVRDNISREVCHARGEAPPL>&#4; Not Applicable</GSTOVRDNISREVCHARGEAPPL>
+        <GSTOVRDNSTOREDNATURE/>
+        <GSTRATEINFERAPPLICABILITY>As per Masters/Company</GSTRATEINFERAPPLICABILITY>
+        <GSTHSNINFERAPPLICABILITY>As per Masters/Company</GSTHSNINFERAPPLICABILITY>
+        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+        <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+        <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+        <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+        <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+        <ISAUTONEGATE>No</ISAUTONEGATE>
+        <ISCUSTOMSCLEARANCE>No</ISCUSTOMSCLEARANCE>
+        <ISTRACKCOMPONENT>No</ISTRACKCOMPONENT>
+        <ISTRACKPRODUCTION>No</ISTRACKPRODUCTION>
+        <ISPRIMARYITEM>No</ISPRIMARYITEM>
+        <ISSCRAP>No</ISSCRAP>
+        <RATE>${rateFormatted}</RATE>
+        <AMOUNT>${amountFormatted}</AMOUNT>
+        <ACTUALQTY>${qtyFormatted}</ACTUALQTY>
+        <BILLEDQTY>${qtyFormatted}</BILLEDQTY>
+        <BATCHALLOCATIONS.LIST>
+         <GODOWNNAME>${plant}</GODOWNNAME>
+         <BATCHNAME>Primary Batch</BATCHNAME>
+         <DESTINATIONGODOWNNAME>${plant}</DESTINATIONGODOWNNAME>
+         <INDENTNO>&#4; Not Applicable</INDENTNO>
+         <ORDERNO>&#4; Not Applicable</ORDERNO>
+         <TRACKINGNUMBER>${voucherNumber}</TRACKINGNUMBER>
+         <DYNAMICCSTISCLEARED>No</DYNAMICCSTISCLEARED>
+         <AMOUNT>${amountFormatted}</AMOUNT>
+         <ACTUALQTY>${qtyFormatted}</ACTUALQTY>
+         <BILLEDQTY>${qtyFormatted}</BILLEDQTY>
+         <ADDITIONALDETAILS.LIST>        </ADDITIONALDETAILS.LIST>
+         <VOUCHERCOMPONENTLIST.LIST>        </VOUCHERCOMPONENTLIST.LIST>
+        </BATCHALLOCATIONS.LIST>
+        <ACCOUNTINGALLOCATIONS.LIST>
+         <OLDAUDITENTRYIDS.LIST TYPE="Number">
+          <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+         </OLDAUDITENTRYIDS.LIST>
+         <LEDGERNAME>${escapeXML(salesLedger)}</LEDGERNAME>
+         <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+         <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+         <LEDGERFROMITEM>No</LEDGERFROMITEM>
+         <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+         <ISPARTYLEDGER>No</ISPARTYLEDGER>
+         <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+         <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+         <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+         <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+         <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+         <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+         <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+         <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+         <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+         <AMOUNT>${amountFormatted}</AMOUNT>
+         <SERVICETAXDETAILS.LIST>        </SERVICETAXDETAILS.LIST>
+         <BANKALLOCATIONS.LIST>        </BANKALLOCATIONS.LIST>
+         <BILLALLOCATIONS.LIST>        </BILLALLOCATIONS.LIST>
+         <INTERESTCOLLECTION.LIST>        </INTERESTCOLLECTION.LIST>
+         <OLDAUDITENTRIES.LIST>        </OLDAUDITENTRIES.LIST>
+         <ACCOUNTAUDITENTRIES.LIST>        </ACCOUNTAUDITENTRIES.LIST>
+         <AUDITENTRIES.LIST>        </AUDITENTRIES.LIST>
+         <INPUTCRALLOCS.LIST>        </INPUTCRALLOCS.LIST>
+         <DUTYHEADDETAILS.LIST>        </DUTYHEADDETAILS.LIST>
+         <EXCISEDUTYHEADDETAILS.LIST>        </EXCISEDUTYHEADDETAILS.LIST>
+         <RATEDETAILS.LIST>        </RATEDETAILS.LIST>
+         <SUMMARYALLOCS.LIST>        </SUMMARYALLOCS.LIST>
+         <CENVATDUTYALLOCATIONS.LIST>        </CENVATDUTYALLOCATIONS.LIST>
+         <STPYMTDETAILS.LIST>        </STPYMTDETAILS.LIST>
+         <EXCISEPAYMENTALLOCATIONS.LIST>        </EXCISEPAYMENTALLOCATIONS.LIST>
+         <TAXBILLALLOCATIONS.LIST>        </TAXBILLALLOCATIONS.LIST>
+         <TAXOBJECTALLOCATIONS.LIST>        </TAXOBJECTALLOCATIONS.LIST>
+         <TDSEXPENSEALLOCATIONS.LIST>        </TDSEXPENSEALLOCATIONS.LIST>
+         <VATSTATUTORYDETAILS.LIST>        </VATSTATUTORYDETAILS.LIST>
+         <COSTTRACKALLOCATIONS.LIST>        </COSTTRACKALLOCATIONS.LIST>
+         <REFVOUCHERDETAILS.LIST>        </REFVOUCHERDETAILS.LIST>
+         <INVOICEWISEDETAILS.LIST>        </INVOICEWISEDETAILS.LIST>
+         <VATITCDETAILS.LIST>        </VATITCDETAILS.LIST>
+         <ADVANCETAXDETAILS.LIST>        </ADVANCETAXDETAILS.LIST>
+         <TAXTYPEALLOCATIONS.LIST>        </TAXTYPEALLOCATIONS.LIST>
+        </ACCOUNTINGALLOCATIONS.LIST>
+        <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+        <RATEDETAILS.LIST>
+         <GSTRATEDUTYHEAD>CGST</GSTRATEDUTYHEAD>
+        </RATEDETAILS.LIST>
+        <RATEDETAILS.LIST>
+         <GSTRATEDUTYHEAD>SGST/UTGST</GSTRATEDUTYHEAD>
+        </RATEDETAILS.LIST>
+        <RATEDETAILS.LIST>
+         <GSTRATEDUTYHEAD>IGST</GSTRATEDUTYHEAD>
+        </RATEDETAILS.LIST>
+        <RATEDETAILS.LIST>
+         <GSTRATEDUTYHEAD>Cess</GSTRATEDUTYHEAD>
+        </RATEDETAILS.LIST>
+        <RATEDETAILS.LIST>
+         <GSTRATEDUTYHEAD>State Cess</GSTRATEDUTYHEAD>
+        </RATEDETAILS.LIST>
+        <SUPPLEMENTARYDUTYHEADDETAILS.LIST>       </SUPPLEMENTARYDUTYHEADDETAILS.LIST>
+        <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+        <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+        <EXCISEALLOCATIONS.LIST>       </EXCISEALLOCATIONS.LIST>
+        <EXPENSEALLOCATIONS.LIST>       </EXPENSEALLOCATIONS.LIST>
+       </ALLINVENTORYENTRIES.LIST>`;
+    }).join('\n');
+
+    const totalPartyAmountFormatted = (-totalVoucherAmount).toFixed(2);
+
+    return `<ENVELOPE>
+ <HEADER>
+  <TALLYREQUEST>Import Data</TALLYREQUEST>
+ </HEADER>
+ <BODY>
+  <IMPORTDATA>
+   <REQUESTDESC>
+    <REPORTNAME>Vouchers</REPORTNAME>
+    <STATICVARIABLES>
+     <SVCURRENTCOMPANY>${escapeXML(COMPANY_NAME)}</SVCURRENTCOMPANY>
+    </STATICVARIABLES>
+   </REQUESTDESC>
+   <REQUESTDATA>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <VOUCHER VCHTYPE="${escapeXML(voucherTypeName)}" ACTION="Create" OBJVIEW="Invoice Voucher View">
+      <ADDRESS.LIST TYPE="String">
+       <ADDRESS>${address}</ADDRESS>
+      </ADDRESS.LIST>
+      <BASICBUYERADDRESS.LIST TYPE="String">
+       <BASICBUYERADDRESS>${address}</BASICBUYERADDRESS>
+      </BASICBUYERADDRESS.LIST>
+      <OLDAUDITENTRYIDS.LIST TYPE="Number">
+       <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+      </OLDAUDITENTRYIDS.LIST>
+      <DATE>${docDateFormatted}</DATE>
+      <VCHSTATUSDATE>${docDateFormatted}</VCHSTATUSDATE>
+      <GSTREGISTRATIONTYPE>&#4; Unknown</GSTREGISTRATIONTYPE>
+      <VATDEALERTYPE>&#4; Unknown</VATDEALERTYPE>
+      <STATENAME>${regionName}</STATENAME>
+      <COUNTRYOFRESIDENCE>India</COUNTRYOFRESIDENCE>
+      <PARTYGSTIN>${gstNo}</PARTYGSTIN>
+      <PLACEOFSUPPLY>${regionName}</PLACEOFSUPPLY>
+      <VOUCHERTYPENAME>${escapeXML(voucherTypeName)}</VOUCHERTYPENAME>
+      <PARTYNAME>${partyLedger}</PARTYNAME>
+      <GSTREGISTRATION TAXTYPE="GST" TAXREGISTRATION="">Tamil Nadu Registration</GSTREGISTRATION>
+      <PARTYLEDGERNAME>${partyLedger}</PARTYLEDGERNAME>
+      <VOUCHERNUMBER>${voucherNumber}</VOUCHERNUMBER>
+      <BASICBUYERNAME>${partyLedger}</BASICBUYERNAME>
+      <CMPGSTREGISTRATIONTYPE>Regular</CMPGSTREGISTRATIONTYPE>
+      <CMPGSTSTATE>${cmpState}</CMPGSTSTATE>
+      <NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
+      <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+      <VCHSTATUSVOUCHERTYPE>${escapeXML(voucherTypeName)}</VCHSTATUSVOUCHERTYPE>
+      <VCHSTATUSTAXUNIT>Tamil Nadu Registration</VCHSTATUSTAXUNIT>
+      <VCHGSTCLASS>&#4; Not Applicable</VCHGSTCLASS>
+      <DIFFACTUALQTY>No</DIFFACTUALQTY>
+      <ISMSTFROMSYNC>No</ISMSTFROMSYNC>
+      <ISDELETED>No</ISDELETED>
+      <ASORIGINAL>No</ASORIGINAL>
+      <AUDITED>No</AUDITED>
+      <ISOPTIONAL>No</ISOPTIONAL>
+      <EFFECTIVEDATE>${docDateFormatted}</EFFECTIVEDATE>
+      <USETRACKINGNUMBER>No</USETRACKINGNUMBER>
+      <ISINVOICE>No</ISINVOICE>
+      <ISVATDUTYPAID>Yes</ISVATDUTYPAID>
+${inventoryEntriesXML}
+      <CONTRITRANS.LIST>      </CONTRITRANS.LIST>
+      <EWAYBILLERRORLIST.LIST>      </EWAYBILLERRORLIST.LIST>
+      <IRNERRORLIST.LIST>      </IRNERRORLIST.LIST>
+      <HARYANAVAT.LIST>      </HARYANAVAT.LIST>
+      <SUPPLEMENTARYDUTYHEADDETAILS.LIST>      </SUPPLEMENTARYDUTYHEADDETAILS.LIST>
+      <INVOICEDELNOTES.LIST>      </INVOICEDELNOTES.LIST>
+      <INVOICEORDERLIST.LIST>      </INVOICEORDERLIST.LIST>
+      <INVOICEINDENTLIST.LIST>      </INVOICEINDENTLIST.LIST>
+      <ATTENDANCEENTRIES.LIST>      </ATTENDANCEENTRIES.LIST>
+      <ORIGINVOICEDETAILS.LIST>      </ORIGINVOICEDETAILS.LIST>
+      <INVOICEEXPORTLIST.LIST>      </INVOICEEXPORTLIST.LIST>
+      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <LEDGERNAME>${partyLedger}</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>Yes</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${totalPartyAmountFormatted}</AMOUNT>
+       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>
+       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>
+       <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>
+       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>
+       <OLDAUDITENTRIES.LIST>       </OLDAUDITENTRIES.LIST>
+       <ACCOUNTAUDITENTRIES.LIST>       </ACCOUNTAUDITENTRIES.LIST>
+       <AUDITENTRIES.LIST>       </AUDITENTRIES.LIST>
+       <INPUTCRALLOCS.LIST>       </INPUTCRALLOCS.LIST>
+       <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+       <EXCISEDUTYHEADDETAILS.LIST>       </EXCISEDUTYHEADDETAILS.LIST>
+       <RATEDETAILS.LIST>       </RATEDETAILS.LIST>
+       <SUMMARYALLOCS.LIST>       </SUMMARYALLOCS.LIST>
+       <CENVATDUTYALLOCATIONS.LIST>       </CENVATDUTYALLOCATIONS.LIST>
+       <STPYMTDETAILS.LIST>       </STPYMTDETAILS.LIST>
+       <EXCISEPAYMENTALLOCATIONS.LIST>       </EXCISEPAYMENTALLOCATIONS.LIST>
+       <TAXBILLALLOCATIONS.LIST>       </TAXBILLALLOCATIONS.LIST>
+       <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+       <TDSEXPENSEALLOCATIONS.LIST>       </TDSEXPENSEALLOCATIONS.LIST>
+       <VATSTATUTORYDETAILS.LIST>       </VATSTATUTORYDETAILS.LIST>
+       <COSTTRACKALLOCATIONS.LIST>       </COSTTRACKALLOCATIONS.LIST>
+       <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+       <INVOICEWISEDETAILS.LIST>       </INVOICEWISEDETAILS.LIST>
+       <VATITCDETAILS.LIST>       </VATITCDETAILS.LIST>
+       <ADVANCETAXDETAILS.LIST>       </ADVANCETAXDETAILS.LIST>
+       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>
+      </LEDGERENTRIES.LIST>
+      <GST.LIST>      </GST.LIST>
+      <STKJRNLADDLCOSTDETAILS.LIST>      </STKJRNLADDLCOSTDETAILS.LIST>
+      <PAYROLLMODEOFPAYMENT.LIST>      </PAYROLLMODEOFPAYMENT.LIST>
+      <ATTDRECORDS.LIST>      </ATTDRECORDS.LIST>
+      <GSTEWAYCONSIGNORADDRESS.LIST>      </GSTEWAYCONSIGNORADDRESS.LIST>
+      <GSTEWAYCONSIGNEEADDRESS.LIST>      </GSTEWAYCONSIGNEEADDRESS.LIST>
+      <TEMPGSTRATEDETAILS.LIST>      </TEMPGSTRATEDETAILS.LIST>
+      <TEMPGSTADVADJUSTED.LIST>      </TEMPGSTADVADJUSTED.LIST>
+      <GSTBUYERADDRESS.LIST>      </GSTBUYERADDRESS.LIST>
+      <GSTCONSIGNEEADDRESS.LIST>      </GSTCONSIGNEEADDRESS.LIST>
+     </VOUCHER>
+    </TALLYMESSAGE>
+   </REQUESTDATA>
+  </IMPORTDATA>
+ </BODY>
+</ENVELOPE>`;
+}
+
+
 module.exports = {
     getRowValue,
     cleanStateName,
@@ -3095,6 +3472,7 @@ module.exports = {
     generatePurchaseTallyXML,
     generateSalesOrderTallyXML,
     generateFITallyXML,
+    generateDeliveryNoteTallyXML,
     loadPOMaster
 };
 
