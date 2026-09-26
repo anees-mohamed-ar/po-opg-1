@@ -2247,23 +2247,32 @@ function generateStockJournalTallyXML(grnGroup) {
     const grnNumber = escapeXML(String(getRowValue(firstRow, 'Material Document') || '').split('.')[0].trim());
     const docDateFormatted = formatDate(getRowValue(firstRow, 'Document Date') || getRowValue(firstRow, 'Posting Date'));
 
-    // Extract event/trans type (e.g. WA)
+    // Extract event/trans type (e.g. WA, WE, WQ, WI)
     const eventType = String(getRowValue(firstRow, 'Trans./Event Type') || getRowValue(firstRow, 'Trans./Event TypeA') || 'WA').trim().toUpperCase();
 
-    // Extract Doc Type from row
-    const rawDocType = String(
+    // Extract Doc Type from row; if blank, #N/A, or empty, default to ZSTO under its respective Trans./Event Type
+    let rawDocType = String(
         getRowValue(firstRow, 'Doc Type') ||
         getRowValue(firstRow, 'Doc. Type') ||
-        getRowValue(firstRow, 'Document Type') ||
         getRowValue(firstRow, 'Purchase Order type') ||
         getRowValue(firstRow, 'PO Type') ||
         getRowValue(firstRow, 'Purchasing Doc Type') ||
         ''
     ).trim();
-    const docType = rawDocType || '';
+
+    // If still empty, check 'Document Type' only if it's not the same as eventType (like WA or WL)
+    if (!rawDocType) {
+        const dt = String(getRowValue(firstRow, 'Document Type') || '').trim();
+        if (dt && dt.toUpperCase() !== eventType) {
+            rawDocType = dt;
+        }
+    }
+
+    const isInvalidDocType = !rawDocType || rawDocType.toUpperCase() === '#N/A' || rawDocType.toUpperCase() === 'N/A' || rawDocType.toUpperCase() === 'NAN' || rawDocType.toUpperCase() === eventType;
+    const effectiveDocType = isInvalidDocType ? 'ZSTO' : rawDocType;
 
     // Determine Voucher Type: Stock Journal <TransType> <DocType> (e.g. Stock Journal WA ZSTO)
-    const voucherType = docType ? `Stock Journal ${eventType} ${docType}` : `Stock Journal ${eventType}`;
+    const voucherType = `Stock Journal ${eventType} ${effectiveDocType}`;
 
     const activeItems = grnGroup.items.filter(item => {
         const delInd = getRowValue(item, 'Deletion Indicator');
@@ -2274,44 +2283,33 @@ function generateStockJournalTallyXML(grnGroup) {
         return '';
     }
 
-    const isWEZSTO = eventType === 'WE' && docType === 'ZSTO';
+    // Separate items by 'Debit/Credit Ind.':
+    // 'S' = Debit (Incoming / Production -> INVENTORYENTRIESIN)
+    // 'H' = Credit (Outgoing / Consumption -> INVENTORYENTRIESOUT)
+    const sItems = activeItems.filter(item => {
+        const dc = String(getRowValue(item, 'Debit/Credit Ind.') || getRowValue(item, 'Debit/Credit') || '').trim().toUpperCase();
+        return dc === 'S';
+    });
+    const hItems = activeItems.filter(item => {
+        const dc = String(getRowValue(item, 'Debit/Credit Ind.') || getRowValue(item, 'Debit/Credit') || '').trim().toUpperCase();
+        return dc === 'H';
+    });
 
     let inItems = [];
     let outItems = [];
 
-    if (isWEZSTO) {
-        // For WE ZSTO (Single plant-to-plant transfer row)
-        inItems = activeItems;
-        outItems = activeItems;
+    if (sItems.length > 0 || hItems.length > 0) {
+        // If only S exists, inItems has entries and outItems remains empty (pass as it is)
+        // If only H exists, outItems has entries and inItems remains empty (pass as it is)
+        // If both exist, both are populated
+        inItems = sItems;
+        outItems = hItems;
     } else {
-        // For WA Stock Journals:
-        // Use 'Debit/Credit Ind.': 'S' is Debit (Incoming / Production), 'H' is Credit (Outgoing / Consumption)
-        const sItems = activeItems.filter(item => {
-            const dc = String(getRowValue(item, 'Debit/Credit Ind.') || getRowValue(item, 'Debit/Credit') || '').trim().toUpperCase();
-            return dc === 'S';
-        });
-        const hItems = activeItems.filter(item => {
-            const dc = String(getRowValue(item, 'Debit/Credit Ind.') || getRowValue(item, 'Debit/Credit') || '').trim().toUpperCase();
-            return dc === 'H';
-        });
-
-        if (sItems.length > 0 && hItems.length > 0) {
-            inItems = sItems;
-            outItems = hItems;
-        } else if (sItems.length > 0) {
-            inItems = sItems;
-            outItems = activeItems.filter(item => !sItems.includes(item));
-            if (outItems.length === 0) outItems = sItems;
-        } else if (hItems.length > 0) {
-            outItems = hItems;
-            inItems = activeItems.filter(item => !hItems.includes(item));
-            if (inItems.length === 0) inItems = hItems;
-        } else {
-            // Fallback: pair by positive/negative or split
-            inItems = activeItems.filter(item => (parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0) > 0);
-            outItems = activeItems.filter(item => (parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0) < 0);
-            if (inItems.length === 0) inItems = activeItems;
-            if (outItems.length === 0) outItems = activeItems;
+        // Fallback if neither S nor H is specified: inspect quantity sign
+        inItems = activeItems.filter(item => (parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0) > 0);
+        outItems = activeItems.filter(item => (parseFloat(getRowValue(item, 'Qty in Un. of Entry')) || 0) < 0);
+        if (inItems.length === 0 && outItems.length === 0) {
+            outItems = activeItems; // default to consumption if unspecified
         }
     }
 
@@ -3458,6 +3456,635 @@ ${inventoryEntriesXML}
 </ENVELOPE>`;
 }
 
+/**
+ * Generate Tally XML for Sales Invoice
+ * Matches Sales_90015368.xml specification
+ * Narration includes computed non-empty values for:
+ * Profit centre, Volt  -  Draw Voltage, Grp2, Grp2-Desc, Grp3, Grp3  Desc, Std Start Date, Std End Date
+ * Tax amount is split into CGST + SGST if Destination region is '33' (local), else IGST
+ */
+function generateSalesInvoiceTallyXML(salesGroup, vendorMap = {}) {
+    if (!salesGroup || !salesGroup.items || salesGroup.items.length === 0) {
+        throw new Error('No items in Sales Invoice group');
+    }
+
+    const items = salesGroup.items;
+    const firstRow = items[0];
+
+    const rawBillingDoc = salesGroup.poNumber || getRowValue(firstRow, 'Billing Document') || getRowValue(firstRow, 'Document Number') || '';
+    const voucherNumber = escapeXML(String(rawBillingDoc).split('.')[0].trim());
+
+    // Voucher Type Name: Sales {Billing Type} (e.g. Sales ZCOL)
+    const billingType = String(getRowValue(firstRow, 'Billing Type') || 'ZCOL').trim();
+    const voucherType = escapeXML(`Sales ${billingType}`);
+
+    // Sales document reference
+    const rawSalesDoc = getRowValue(firstRow, 'Sales document') || getRowValue(firstRow, 'Reference document') || voucherNumber;
+    const referenceNumber = escapeXML(String(rawSalesDoc).split('.')[0].trim());
+
+    // Billing Date
+    const rawBillingDate = getRowValue(firstRow, 'Billing Date') || getRowValue(firstRow, 'Pricing date') || getRowValue(firstRow, 'Document Date');
+    const docDateFormatted = formatDate(rawBillingDate);
+
+    // Customer Party ledger lookup
+    const rawSoldToParty = getRowValue(firstRow, 'Sold to Party') || getRowValue(firstRow, 'Customer') || '';
+    const customerCode = padVendor(rawSoldToParty);
+    const partyLedger = escapeXML(customerCode || 'Customer');
+
+    const gstNo = escapeXML(String(getRowValue(firstRow, 'GST NO') || '').trim());
+    const destRegion = String(getRowValue(firstRow, 'Destination region') || '33').trim();
+    const isLocalTamilNadu = destRegion === '33' || destRegion === '';
+    const stateName = isLocalTamilNadu ? 'Tamil Nadu' : cleanStateName(getRowValue(firstRow, 'Region Name') || 'Other State');
+    const cmpState = 'Tamil Nadu';
+
+/**
+ * Format date for narration (DD.MM.YYYY).
+ * Handles numeric Excel serial dates (e.g. 44722 -> 10.06.2022).
+ * Returns null for zero, empty, or 00.01.1900 dummy dates so they are omitted from narration.
+ */
+function formatNarrationDate(val) {
+    if (val === undefined || val === null) return null;
+    const str = String(val).trim();
+    if (str === '' || str === '0' || str.toUpperCase() === '#N/A' || str === '00.01.1900' || str === '00.00.0000' || str === '00-01-1900' || str === '1900-01-00') {
+        return null;
+    }
+
+    // Excel numeric serial date (e.g. 44722 or '44722')
+    if (typeof val === 'number' || (!isNaN(str) && !str.includes('.') && !str.includes('-') && !str.includes('/'))) {
+        const serial = parseFloat(str);
+        if (serial <= 60) return null; // 0 or Excel 1900 dummy date
+        const wholeDays = Math.floor(serial);
+        const date = new Date(Date.UTC(1899, 11, 30 + wholeDays));
+        if (isNaN(date.getTime()) || date.getUTCFullYear() <= 1900) return null;
+        const d = String(date.getUTCDate()).padStart(2, '0');
+        const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const y = date.getUTCFullYear();
+        return `${d}.${m}.${y}`;
+    }
+
+    // Date object
+    if (val instanceof Date) {
+        if (isNaN(val.getTime()) || val.getFullYear() <= 1900) return null;
+        const d = String(val.getDate()).padStart(2, '0');
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const y = val.getFullYear();
+        return `${d}.${m}.${y}`;
+    }
+
+    // DD.MM.YYYY string
+    if (str.includes('.')) {
+        const parts = str.split('.');
+        if (parts.length === 3) {
+            const d = parts[0].padStart(2, '0');
+            const m = parts[1].padStart(2, '0');
+            const y = parts[2].trim();
+            if (y === '1900' || y === '0000' || (d === '00' && m === '01') || (d === '00' && m === '00')) return null;
+            return `${d}.${m}.${y}`;
+        }
+    }
+
+    // YYYY-MM-DD or DD-MM-YYYY or with slashes
+    if (str.includes('-') || str.includes('/')) {
+        const sep = str.includes('-') ? '-' : '/';
+        const parts = str.split(sep);
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                // YYYY-MM-DD
+                const y = parts[0];
+                const m = parts[1].padStart(2, '0');
+                const d = parts[2].padStart(2, '0');
+                if (y === '1900' || y === '0000' || (d === '00' && m === '01') || (d === '00' && m === '00')) return null;
+                return `${d}.${m}.${y}`;
+            } else {
+                // DD-MM-YYYY
+                const d = parts[0].padStart(2, '0');
+                const m = parts[1].padStart(2, '0');
+                const y = parts[2];
+                if (y === '1900' || y === '0000' || (d === '00' && m === '01') || (d === '00' && m === '00')) return null;
+                return `${d}.${m}.${y}`;
+            }
+        }
+    }
+
+    return str;
+}
+
+    // Narration computed fields
+    const narrationFields = [
+        { col: 'Profit centre', label: 'Profit centre' },
+        { col: 'Volt  -  Draw Voltage', label: 'Volt  -  Draw Voltage' },
+        { col: 'Grp2', label: 'Grp2' },
+        { col: 'Grp2-Desc', label: 'Grp2-Desc' },
+        { col: 'Grp3', label: 'Grp3' },
+        { col: 'Grp3  Desc', label: 'Grp3  Desc' },
+        { col: 'Std Start Date', label: 'Std Start Date', isDate: true },
+        { col: 'Std End Date', label: 'Std End Date', isDate: true },
+        { col: 'Billing Date', label: 'Fixed Value Date', isDate: true, fallbackCol: 'Fixed Value Date' }
+    ];
+
+    const narrationParts = [];
+    narrationFields.forEach(field => {
+        const col = field.col;
+        const label = field.label;
+        let val = getRowValue(firstRow, col);
+        if ((val === undefined || val === null || String(val).trim() === '' || String(val).trim() === '0') && field.fallbackCol) {
+            val = getRowValue(firstRow, field.fallbackCol);
+        }
+        if ((val === undefined || val === null || String(val).trim() === '' || String(val).trim() === '0') && items.length > 1) {
+            for (let i = 1; i < items.length; i++) {
+                const itemVal = getRowValue(items[i], col) || (field.fallbackCol ? getRowValue(items[i], field.fallbackCol) : undefined);
+                if (itemVal !== undefined && itemVal !== null && String(itemVal).trim() !== '' && String(itemVal).trim() !== '0') {
+                    val = itemVal;
+                    break;
+                }
+            }
+        }
+
+        if (field.isDate) {
+            const formattedDate = formatNarrationDate(val);
+            if (formattedDate) {
+                narrationParts.push(`${label} : ${formattedDate}`);
+            }
+        } else {
+            if (val !== undefined && val !== null && String(val).trim() !== '' && String(val).trim() !== '0' && String(val).trim().toUpperCase() !== '#N/A') {
+                narrationParts.push(`${label} : ${String(val).trim()}`);
+            }
+        }
+    });
+    const narrationText = escapeXML(narrationParts.join(' | '));
+
+    let totalNetValue = 0;
+    let totalTaxAmount = 0;
+
+    const inventoryEntriesXML = items.map(item => {
+        const rawMaterial = String(getRowValue(item, 'Material') || getRowValue(item, 'Material entered') || '').trim();
+        const shortText = String(getRowValue(item, 'Description') || getRowValue(item, 'Material Description') || getRowValue(item, 'Short Text') || '').trim();
+        const stockItemName = escapeXML(getStockItemName(rawMaterial, shortText));
+
+        const plant = escapeXML(String(getRowValue(item, 'Plant') || '1310').split('.')[0].trim());
+        const batch = escapeXML(String(getRowValue(item, 'Batch') || 'Primary Batch').trim() || 'Primary Batch');
+
+        const qtyNum = parseFloat(getRowValue(item, 'Billed Quantity') || getRowValue(item, 'Quantity') || 0) || 0;
+        const uom = escapeXML(String(getRowValue(item, 'Sales unit') || getRowValue(item, 'Base Unit of Measure') || 'MT').trim());
+        const qtyFormatted = ` ${formatQuantity(qtyNum)} ${uom}`;
+
+        const rowNetVal = parseFloat(getRowValue(item, 'Net value') || 0) || 0;
+        const rowTaxAmt = parseFloat(getRowValue(item, 'Tax amount') || getRowValue(item, 'Tax amount_1') || 0) || 0;
+        totalNetValue += rowNetVal;
+        totalTaxAmount += rowTaxAmt;
+
+        // Assessable Inventory Amount = Net value - Tax amount
+        let assessableAmount = rowNetVal - rowTaxAmt;
+        if (assessableAmount <= 0 && rowNetVal > 0) {
+            assessableAmount = rowNetVal;
+        }
+
+        const rate = qtyNum > 0 ? (assessableAmount / qtyNum) : 0;
+        const rateFormatted = `${rate.toFixed(2)}/${uom}`;
+        const amountFormatted = assessableAmount.toFixed(2);
+
+        // Sales Ledger: e.g. "Sales ZCOL" from Billing Type
+        const billingType = String(getRowValue(item, 'Billing Type') || getRowValue(firstRow, 'Billing Type') || 'ZCOL').trim();
+        const salesLedger = `Sales ${billingType}`;
+
+        return `       <ALLINVENTORYENTRIES.LIST>
+        <STOCKITEMNAME>${stockItemName}</STOCKITEMNAME>
+        <GSTOVRDNINELIGIBLEITC>&#4; Not Applicable</GSTOVRDNINELIGIBLEITC>
+        <GSTOVRDNISREVCHARGEAPPL>&#4; Not Applicable</GSTOVRDNISREVCHARGEAPPL>
+        <GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>
+        <GSTSOURCETYPE>Stock Item</GSTSOURCETYPE>
+        <GSTITEMSOURCE>${stockItemName}</GSTITEMSOURCE>
+        <HSNSOURCETYPE>Stock Item</HSNSOURCETYPE>
+        <HSNITEMSOURCE>${stockItemName}</HSNITEMSOURCE>
+        <GSTOVRDNSTOREDNATURE/>
+        <GSTOVRDNTYPEOFSUPPLY>Capital Goods</GSTOVRDNTYPEOFSUPPLY>
+        <GSTRATEINFERAPPLICABILITY>As per Masters/Company</GSTRATEINFERAPPLICABILITY>
+        <GSTHSNINFERAPPLICABILITY>As per Masters/Company</GSTHSNINFERAPPLICABILITY>
+        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+        <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+        <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+        <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+        <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+        <ISAUTONEGATE>No</ISAUTONEGATE>
+        <ISCUSTOMSCLEARANCE>No</ISCUSTOMSCLEARANCE>
+        <ISTRACKCOMPONENT>No</ISTRACKCOMPONENT>
+        <ISTRACKPRODUCTION>No</ISTRACKPRODUCTION>
+        <ISPRIMARYITEM>No</ISPRIMARYITEM>
+        <ISSCRAP>No</ISSCRAP>
+        <RATE>${rateFormatted}</RATE>
+        <AMOUNT>${amountFormatted}</AMOUNT>
+        <ACTUALQTY>${qtyFormatted}</ACTUALQTY>
+        <BILLEDQTY>${qtyFormatted}</BILLEDQTY>
+        <BATCHALLOCATIONS.LIST>
+         <GODOWNNAME>${plant}</GODOWNNAME>
+         <BATCHNAME>${batch}</BATCHNAME>
+         <DESTINATIONGODOWNNAME>${plant}</DESTINATIONGODOWNNAME>
+         <INDENTNO>&#4; Not Applicable</INDENTNO>
+         <ORDERNO>${referenceNumber}</ORDERNO>
+         <TRACKINGNUMBER>${voucherNumber}</TRACKINGNUMBER>
+         <DYNAMICCSTISCLEARED>No</DYNAMICCSTISCLEARED>
+         <AMOUNT>${amountFormatted}</AMOUNT>
+         <ACTUALQTY>${qtyFormatted}</ACTUALQTY>
+         <BILLEDQTY>${qtyFormatted}</BILLEDQTY>
+         <ADDITIONALDETAILS.LIST>        </ADDITIONALDETAILS.LIST>
+         <VOUCHERCOMPONENTLIST.LIST>        </VOUCHERCOMPONENTLIST.LIST>
+        </BATCHALLOCATIONS.LIST>
+        <ACCOUNTINGALLOCATIONS.LIST>
+         <OLDAUDITENTRYIDS.LIST TYPE="Number">
+          <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+         </OLDAUDITENTRYIDS.LIST>
+         <LEDGERNAME>${escapeXML(salesLedger)}</LEDGERNAME>
+         <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+         <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+         <LEDGERFROMITEM>No</LEDGERFROMITEM>
+         <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+         <ISPARTYLEDGER>No</ISPARTYLEDGER>
+         <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+         <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+         <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+         <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+         <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+         <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+         <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+         <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+         <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+         <AMOUNT>${amountFormatted}</AMOUNT>
+         <SERVICETAXDETAILS.LIST>        </SERVICETAXDETAILS.LIST>
+         <BANKALLOCATIONS.LIST>        </BANKALLOCATIONS.LIST>
+         <BILLALLOCATIONS.LIST>        </BILLALLOCATIONS.LIST>
+         <INTERESTCOLLECTION.LIST>        </INTERESTCOLLECTION.LIST>
+         <OLDAUDITENTRIES.LIST>        </OLDAUDITENTRIES.LIST>
+         <ACCOUNTAUDITENTRIES.LIST>        </ACCOUNTAUDITENTRIES.LIST>
+         <AUDITENTRIES.LIST>        </AUDITENTRIES.LIST>
+         <INPUTCRALLOCS.LIST>        </INPUTCRALLOCS.LIST>
+         <DUTYHEADDETAILS.LIST>        </DUTYHEADDETAILS.LIST>
+         <EXCISEDUTYHEADDETAILS.LIST>        </EXCISEDUTYHEADDETAILS.LIST>
+         <RATEDETAILS.LIST>        </RATEDETAILS.LIST>
+         <SUMMARYALLOCS.LIST>        </SUMMARYALLOCS.LIST>
+         <CENVATDUTYALLOCATIONS.LIST>        </CENVATDUTYALLOCATIONS.LIST>
+         <STPYMTDETAILS.LIST>        </STPYMTDETAILS.LIST>
+         <EXCISEPAYMENTALLOCATIONS.LIST>        </EXCISEPAYMENTALLOCATIONS.LIST>
+         <TAXBILLALLOCATIONS.LIST>        </TAXBILLALLOCATIONS.LIST>
+         <TAXOBJECTALLOCATIONS.LIST>        </TAXOBJECTALLOCATIONS.LIST>
+         <TDSEXPENSEALLOCATIONS.LIST>        </TDSEXPENSEALLOCATIONS.LIST>
+         <VATSTATUTORYDETAILS.LIST>        </VATSTATUTORYDETAILS.LIST>
+         <COSTTRACKALLOCATIONS.LIST>        </COSTTRACKALLOCATIONS.LIST>
+         <REFVOUCHERDETAILS.LIST>        </REFVOUCHERDETAILS.LIST>
+         <INVOICEWISEDETAILS.LIST>        </INVOICEWISEDETAILS.LIST>
+         <VATITCDETAILS.LIST>        </VATITCDETAILS.LIST>
+         <ADVANCETAXDETAILS.LIST>        </ADVANCETAXDETAILS.LIST>
+         <TAXTYPEALLOCATIONS.LIST>        </TAXTYPEALLOCATIONS.LIST>
+        </ACCOUNTINGALLOCATIONS.LIST>
+        <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+        <SUPPLEMENTARYDUTYHEADDETAILS.LIST>       </SUPPLEMENTARYDUTYHEADDETAILS.LIST>
+        <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+        <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+        <EXCISEALLOCATIONS.LIST>       </EXCISEALLOCATIONS.LIST>
+        <EXPENSEALLOCATIONS.LIST>       </EXPENSEALLOCATIONS.LIST>
+       </ALLINVENTORYENTRIES.LIST>`;
+    }).join('\n');
+
+    // Tax calculation based on Destination region
+    let taxLedgersXML = '';
+    if (totalTaxAmount > 0) {
+        if (isLocalTamilNadu) {
+            // Local 33: Split tax amount equally for CGST and SGST
+            const halfTax = totalTaxAmount / 2;
+            const halfTaxFormatted = halfTax.toFixed(2);
+            taxLedgersXML = `      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <ROUNDTYPE>&#4; Not Applicable</ROUNDTYPE>
+       <LEDGERNAME>CGST Tax Sales</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>No</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${halfTaxFormatted}</AMOUNT>
+       <VATEXPAMOUNT>${halfTaxFormatted}</VATEXPAMOUNT>
+       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>
+       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>
+       <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>
+       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>
+       <OLDAUDITENTRIES.LIST>       </OLDAUDITENTRIES.LIST>
+       <ACCOUNTAUDITENTRIES.LIST>       </ACCOUNTAUDITENTRIES.LIST>
+       <AUDITENTRIES.LIST>       </AUDITENTRIES.LIST>
+       <INPUTCRALLOCS.LIST>       </INPUTCRALLOCS.LIST>
+       <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+       <EXCISEDUTYHEADDETAILS.LIST>       </EXCISEDUTYHEADDETAILS.LIST>
+       <RATEDETAILS.LIST>       </RATEDETAILS.LIST>
+       <SUMMARYALLOCS.LIST>       </SUMMARYALLOCS.LIST>
+       <CENVATDUTYALLOCATIONS.LIST>       </CENVATDUTYALLOCATIONS.LIST>
+       <STPYMTDETAILS.LIST>       </STPYMTDETAILS.LIST>
+       <EXCISEPAYMENTALLOCATIONS.LIST>       </EXCISEPAYMENTALLOCATIONS.LIST>
+       <TAXBILLALLOCATIONS.LIST>       </TAXBILLALLOCATIONS.LIST>
+       <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+       <TDSEXPENSEALLOCATIONS.LIST>       </TDSEXPENSEALLOCATIONS.LIST>
+       <VATSTATUTORYDETAILS.LIST>       </VATSTATUTORYDETAILS.LIST>
+       <COSTTRACKALLOCATIONS.LIST>       </COSTTRACKALLOCATIONS.LIST>
+       <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+       <INVOICEWISEDETAILS.LIST>       </INVOICEWISEDETAILS.LIST>
+       <VATITCDETAILS.LIST>       </VATITCDETAILS.LIST>
+       <ADVANCETAXDETAILS.LIST>       </ADVANCETAXDETAILS.LIST>
+       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>
+      </LEDGERENTRIES.LIST>
+      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <ROUNDTYPE>&#4; Not Applicable</ROUNDTYPE>
+       <LEDGERNAME>SGST Tax Sales</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>No</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${halfTaxFormatted}</AMOUNT>
+       <VATEXPAMOUNT>${halfTaxFormatted}</VATEXPAMOUNT>
+       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>
+       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>
+       <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>
+       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>
+       <OLDAUDITENTRIES.LIST>       </OLDAUDITENTRIES.LIST>
+       <ACCOUNTAUDITENTRIES.LIST>       </ACCOUNTAUDITENTRIES.LIST>
+       <AUDITENTRIES.LIST>       </AUDITENTRIES.LIST>
+       <INPUTCRALLOCS.LIST>       </INPUTCRALLOCS.LIST>
+       <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+       <EXCISEDUTYHEADDETAILS.LIST>       </EXCISEDUTYHEADDETAILS.LIST>
+       <RATEDETAILS.LIST>       </RATEDETAILS.LIST>
+       <SUMMARYALLOCS.LIST>       </SUMMARYALLOCS.LIST>
+       <CENVATDUTYALLOCATIONS.LIST>       </CENVATDUTYALLOCATIONS.LIST>
+       <STPYMTDETAILS.LIST>       </STPYMTDETAILS.LIST>
+       <EXCISEPAYMENTALLOCATIONS.LIST>       </EXCISEPAYMENTALLOCATIONS.LIST>
+       <TAXBILLALLOCATIONS.LIST>       </TAXBILLALLOCATIONS.LIST>
+       <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+       <TDSEXPENSEALLOCATIONS.LIST>       </TDSEXPENSEALLOCATIONS.LIST>
+       <VATSTATUTORYDETAILS.LIST>       </VATSTATUTORYDETAILS.LIST>
+       <COSTTRACKALLOCATIONS.LIST>       </COSTTRACKALLOCATIONS.LIST>
+       <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+       <INVOICEWISEDETAILS.LIST>       </INVOICEWISEDETAILS.LIST>
+       <VATITCDETAILS.LIST>       </VATITCDETAILS.LIST>
+       <ADVANCETAXDETAILS.LIST>       </ADVANCETAXDETAILS.LIST>
+       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>
+      </LEDGERENTRIES.LIST>`;
+        } else {
+            // Other destination region: Pass full tax amount as IGST Tax Sales
+            const taxFormatted = totalTaxAmount.toFixed(2);
+            taxLedgersXML = `      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <ROUNDTYPE>&#4; Not Applicable</ROUNDTYPE>
+       <LEDGERNAME>IGST Tax Sales</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>No</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${taxFormatted}</AMOUNT>
+       <VATEXPAMOUNT>${taxFormatted}</VATEXPAMOUNT>
+       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>
+       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>
+       <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>
+       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>
+       <OLDAUDITENTRIES.LIST>       </OLDAUDITENTRIES.LIST>
+       <ACCOUNTAUDITENTRIES.LIST>       </ACCOUNTAUDITENTRIES.LIST>
+       <AUDITENTRIES.LIST>       </AUDITENTRIES.LIST>
+       <INPUTCRALLOCS.LIST>       </INPUTCRALLOCS.LIST>
+       <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+       <EXCISEDUTYHEADDETAILS.LIST>       </EXCISEDUTYHEADDETAILS.LIST>
+       <RATEDETAILS.LIST>       </RATEDETAILS.LIST>
+       <SUMMARYALLOCS.LIST>       </SUMMARYALLOCS.LIST>
+       <CENVATDUTYALLOCATIONS.LIST>       </CENVATDUTYALLOCATIONS.LIST>
+       <STPYMTDETAILS.LIST>       </STPYMTDETAILS.LIST>
+       <EXCISEPAYMENTALLOCATIONS.LIST>       </EXCISEPAYMENTALLOCATIONS.LIST>
+       <TAXBILLALLOCATIONS.LIST>       </TAXBILLALLOCATIONS.LIST>
+       <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+       <TDSEXPENSEALLOCATIONS.LIST>       </TDSEXPENSEALLOCATIONS.LIST>
+       <VATSTATUTORYDETAILS.LIST>       </VATSTATUTORYDETAILS.LIST>
+       <COSTTRACKALLOCATIONS.LIST>       </COSTTRACKALLOCATIONS.LIST>
+       <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+       <INVOICEWISEDETAILS.LIST>       </INVOICEWISEDETAILS.LIST>
+       <VATITCDETAILS.LIST>       </VATITCDETAILS.LIST>
+       <ADVANCETAXDETAILS.LIST>       </ADVANCETAXDETAILS.LIST>
+       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>
+      </LEDGERENTRIES.LIST>`;
+        }
+    }
+
+    // Party entry amount is total net value (negative in Tally credit entry)
+    const partyAmountFormatted = (-totalNetValue).toFixed(2);
+    const remoteId = `1f4bca00-f679-4031-a055-5ca2bb211a68-${voucherNumber.padStart(8, '0')}`;
+    const vchKey = `1f4bca00-f679-4031-a055-5ca2bb211a68-0000ae6b:${voucherNumber.padStart(8, '0')}`;
+
+    return `<ENVELOPE>
+ <HEADER>
+  <TALLYREQUEST>Import Data</TALLYREQUEST>
+ </HEADER>
+ <BODY>
+  <IMPORTDATA>
+   <REQUESTDESC>
+    <REPORTNAME>Vouchers</REPORTNAME>
+    <STATICVARIABLES>
+     <SVCURRENTCOMPANY>${escapeXML(COMPANY_NAME)}</SVCURRENTCOMPANY>
+    </STATICVARIABLES>
+   </REQUESTDESC>
+   <REQUESTDATA>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <VOUCHER REMOTEID="${remoteId}" VCHKEY="${vchKey}" VCHTYPE="${voucherType}" ACTION="Create" OBJVIEW="Invoice Voucher View">
+      <OLDAUDITENTRYIDS.LIST TYPE="Number">
+       <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+      </OLDAUDITENTRYIDS.LIST>
+      <DATE>${docDateFormatted}</DATE>
+      <REFERENCEDATE>${docDateFormatted}</REFERENCEDATE>
+      <VCHSTATUSDATE>${docDateFormatted}</VCHSTATUSDATE>
+      <GUID>${remoteId}</GUID>
+      <GSTREGISTRATIONTYPE>&#4; Unknown</GSTREGISTRATIONTYPE>
+      <VATDEALERTYPE>&#4; Unknown</VATDEALERTYPE>
+      <STATENAME>${stateName}</STATENAME>
+      <NARRATION>${narrationText}</NARRATION>
+      <COUNTRYOFRESIDENCE>India</COUNTRYOFRESIDENCE>
+      <PLACEOFSUPPLY>${stateName}</PLACEOFSUPPLY>
+      <VOUCHERTYPENAME>${voucherType}</VOUCHERTYPENAME>
+      <PARTYNAME>${partyLedger}</PARTYNAME>
+      <PARTYLEDGERNAME>${partyLedger}</PARTYLEDGERNAME>
+      <VOUCHERNUMBER>${voucherNumber}</VOUCHERNUMBER>
+      <BASICBUYERNAME>${partyLedger}</BASICBUYERNAME>
+      <CMPGSTREGISTRATIONTYPE>Regular</CMPGSTREGISTRATIONTYPE>
+      <REFERENCE>${referenceNumber}</REFERENCE>
+      <PARTYMAILINGNAME>${partyLedger}</PARTYMAILINGNAME>
+      <CONSIGNEEMAILINGNAME>${partyLedger}</CONSIGNEEMAILINGNAME>
+      <CONSIGNEESTATENAME>${stateName}</CONSIGNEESTATENAME>
+      <CMPGSTSTATE>${cmpState}</CMPGSTSTATE>
+      <CONSIGNEECOUNTRYNAME>India</CONSIGNEECOUNTRYNAME>
+      <BASICBASEPARTYNAME>${partyLedger}</BASICBASEPARTYNAME>
+      <NUMBERINGSTYLE>Manual</NUMBERINGSTYLE>
+      <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>
+      <CSTFORMRECVTYPE>&#4; Not Applicable</CSTFORMRECVTYPE>
+      <FBTPAYMENTTYPE>Default</FBTPAYMENTTYPE>
+      <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+      <VCHSTATUSTAXADJUSTMENT>Default</VCHSTATUSTAXADJUSTMENT>
+      <VCHSTATUSVOUCHERTYPE>${voucherType}</VCHSTATUSVOUCHERTYPE>
+      <VCHGSTCLASS>&#4; Not Applicable</VCHGSTCLASS>
+      <VCHENTRYMODE>Item Invoice</VCHENTRYMODE>
+      <DIFFACTUALQTY>No</DIFFACTUALQTY>
+      <ISMSTFROMSYNC>No</ISMSTFROMSYNC>
+      <ISDELETED>No</ISDELETED>
+      <ISSECURITYONWHENENTERED>No</ISSECURITYONWHENENTERED>
+      <ASORIGINAL>No</ASORIGINAL>
+      <AUDITED>No</AUDITED>
+      <ISCOMMONPARTY>No</ISCOMMONPARTY>
+      <FORJOBCOSTING>No</FORJOBCOSTING>
+      <ISOPTIONAL>No</ISOPTIONAL>
+      <EFFECTIVEDATE>${docDateFormatted}</EFFECTIVEDATE>
+      <USEFOREXCISE>No</USEFOREXCISE>
+      <ISFORJOBWORKIN>No</ISFORJOBWORKIN>
+      <ALLOWCONSUMPTION>No</ALLOWCONSUMPTION>
+      <USEFORINTEREST>No</USEFORINTEREST>
+      <USEFORGAINLOSS>No</USEFORGAINLOSS>
+      <USEFORGODOWNTRANSFER>No</USEFORGODOWNTRANSFER>
+      <USEFORCOMPOUND>No</USEFORCOMPOUND>
+      <USEFORSERVICETAX>No</USEFORSERVICETAX>
+      <ISREVERSECHARGEAPPLICABLE>No</ISREVERSECHARGEAPPLICABLE>
+      <ISSYSTEM>No</ISSYSTEM>
+      <ISFETCHEDONLY>No</ISFETCHEDONLY>
+      <ISGSTOVERRIDDEN>No</ISGSTOVERRIDDEN>
+      <ISCANCELLED>No</ISCANCELLED>
+      <ISONHOLD>No</ISONHOLD>
+      <ISSUMMARY>No</ISSUMMARY>
+      <ISECOMMERCESUPPLY>No</ISECOMMERCESUPPLY>
+      <ISBOENOTAPPLICABLE>No</ISBOENOTAPPLICABLE>
+      <ISGSTSECSEVENAPPLICABLE>No</ISGSTSECSEVENAPPLICABLE>
+      <IGNOREEINVVALIDATION>No</IGNOREEINVVALIDATION>
+      <ISELIGIBLEFORITC>Yes</ISELIGIBLEFORITC>
+      <USETRACKINGNUMBER>No</USETRACKINGNUMBER>
+      <ISINVOICE>Yes</ISINVOICE>
+      <ISVATDUTYPAID>Yes</ISVATDUTYPAID>
+${inventoryEntriesXML}
+      <CONTRITRANS.LIST>      </CONTRITRANS.LIST>
+      <EWAYBILLERRORLIST.LIST>      </EWAYBILLERRORLIST.LIST>
+      <IRNERRORLIST.LIST>      </IRNERRORLIST.LIST>
+      <HARYANAVAT.LIST>      </HARYANAVAT.LIST>
+      <SUPPLEMENTARYDUTYHEADDETAILS.LIST>      </SUPPLEMENTARYDUTYHEADDETAILS.LIST>
+      <INVOICEDELNOTES.LIST>      </INVOICEDELNOTES.LIST>
+      <INVOICEORDERLIST.LIST>
+       <BASICORDERDATE>${docDateFormatted}</BASICORDERDATE>
+       <BASICPURCHASEORDERNO>${referenceNumber}</BASICPURCHASEORDERNO>
+      </INVOICEORDERLIST.LIST>
+      <INVOICEINDENTLIST.LIST>      </INVOICEINDENTLIST.LIST>
+      <ATTENDANCEENTRIES.LIST>      </ATTENDANCEENTRIES.LIST>
+      <ORIGINVOICEDETAILS.LIST>      </ORIGINVOICEDETAILS.LIST>
+      <INVOICEEXPORTLIST.LIST>      </INVOICEEXPORTLIST.LIST>
+      <LEDGERENTRIES.LIST>
+       <OLDAUDITENTRYIDS.LIST TYPE="Number">
+        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>
+       </OLDAUDITENTRYIDS.LIST>
+       <LEDGERNAME>${partyLedger}</LEDGERNAME>
+       <GSTCLASS>&#4; Not Applicable</GSTCLASS>
+       <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+       <LEDGERFROMITEM>No</LEDGERFROMITEM>
+       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>
+       <ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>
+       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>
+       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>
+       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>
+       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>
+       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>
+       <ISLASTDEEMEDPOSITIVE>Yes</ISLASTDEEMEDPOSITIVE>
+       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>
+       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>
+       <AMOUNT>${partyAmountFormatted}</AMOUNT>
+       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>
+       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>
+       <BILLALLOCATIONS.LIST>
+        <NAME>${voucherNumber}</NAME>
+        <BILLTYPE>New Ref</BILLTYPE>
+        <TDSDEDUCTEEISSPECIALRATE>No</TDSDEDUCTEEISSPECIALRATE>
+        <AMOUNT>${partyAmountFormatted}</AMOUNT>
+        <INTERESTCOLLECTION.LIST>        </INTERESTCOLLECTION.LIST>
+        <STBILLCATEGORIES.LIST>        </STBILLCATEGORIES.LIST>
+       </BILLALLOCATIONS.LIST>
+       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>
+       <OLDAUDITENTRIES.LIST>       </OLDAUDITENTRIES.LIST>
+       <ACCOUNTAUDITENTRIES.LIST>       </ACCOUNTAUDITENTRIES.LIST>
+       <AUDITENTRIES.LIST>       </AUDITENTRIES.LIST>
+       <INPUTCRALLOCS.LIST>       </INPUTCRALLOCS.LIST>
+       <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>
+       <EXCISEDUTYHEADDETAILS.LIST>       </EXCISEDUTYHEADDETAILS.LIST>
+       <RATEDETAILS.LIST>       </RATEDETAILS.LIST>
+       <SUMMARYALLOCS.LIST>       </SUMMARYALLOCS.LIST>
+       <CENVATDUTYALLOCATIONS.LIST>       </CENVATDUTYALLOCATIONS.LIST>
+       <STPYMTDETAILS.LIST>       </STPYMTDETAILS.LIST>
+       <EXCISEPAYMENTALLOCATIONS.LIST>       </EXCISEPAYMENTALLOCATIONS.LIST>
+       <TAXBILLALLOCATIONS.LIST>       </TAXBILLALLOCATIONS.LIST>
+       <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>
+       <TDSEXPENSEALLOCATIONS.LIST>       </TDSEXPENSEALLOCATIONS.LIST>
+       <VATSTATUTORYDETAILS.LIST>       </VATSTATUTORYDETAILS.LIST>
+       <COSTTRACKALLOCATIONS.LIST>       </COSTTRACKALLOCATIONS.LIST>
+       <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>
+       <INVOICEWISEDETAILS.LIST>       </INVOICEWISEDETAILS.LIST>
+       <VATITCDETAILS.LIST>       </VATITCDETAILS.LIST>
+       <ADVANCETAXDETAILS.LIST>       </ADVANCETAXDETAILS.LIST>
+       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>
+      </LEDGERENTRIES.LIST>
+${taxLedgersXML}
+      <GST.LIST>      </GST.LIST>
+      <STKJRNLADDLCOSTDETAILS.LIST>      </STKJRNLADDLCOSTDETAILS.LIST>
+      <PAYROLLMODEOFPAYMENT.LIST>      </PAYROLLMODEOFPAYMENT.LIST>
+      <ATTDRECORDS.LIST>      </ATTDRECORDS.LIST>
+      <GSTEWAYCONSIGNORADDRESS.LIST>      </GSTEWAYCONSIGNORADDRESS.LIST>
+      <GSTEWAYCONSIGNEEADDRESS.LIST>      </GSTEWAYCONSIGNEEADDRESS.LIST>
+      <TEMPGSTRATEDETAILS.LIST>      </TEMPGSTRATEDETAILS.LIST>
+      <TEMPGSTADVADJUSTED.LIST>      </TEMPGSTADVADJUSTED.LIST>
+      <GSTBUYERADDRESS.LIST>      </GSTBUYERADDRESS.LIST>
+      <GSTCONSIGNEEADDRESS.LIST>      </GSTCONSIGNEEADDRESS.LIST>
+     </VOUCHER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <COMPANY>
+      <REMOTECMPINFO.LIST MERGE="Yes">
+       <NAME>1f4bca00-f679-4031-a055-5ca2bb211a68</NAME>
+       <REMOTECMPNAME>${escapeXML(COMPANY_NAME)}</REMOTECMPNAME>
+       <REMOTECMPSTATE>${cmpState}</REMOTECMPSTATE>
+      </REMOTECMPINFO.LIST>
+     </COMPANY>
+    </TALLYMESSAGE>
+   </REQUESTDATA>
+  </IMPORTDATA>
+ </BODY>
+</ENVELOPE>`;
+}
+
 
 module.exports = {
     getRowValue,
@@ -3473,6 +4100,7 @@ module.exports = {
     generateSalesOrderTallyXML,
     generateFITallyXML,
     generateDeliveryNoteTallyXML,
+    generateSalesInvoiceTallyXML,
     loadPOMaster
 };
 

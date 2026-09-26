@@ -3,6 +3,7 @@ import './App.css';
 import XmlVisualizer from './XmlVisualizer';
 import DayBookVisualizer from './DayBookVisualizer';
 import TemplatesViewer from './TemplatesViewer';
+import config, { API_BASE } from './config';
 
 function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -140,7 +141,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`http://192.168.1.166:5001/api/upload?importType=${importType}`, {
+      const response = await fetch(`${API_BASE}/api/upload?importType=${importType}`, {
         method: 'POST',
         body: formData,
       });
@@ -223,7 +224,7 @@ function App() {
       setSelectedPos(newSelected);
     } catch (err) {
       if (err.message && (err.message.toLowerCase().includes('fetch') || err.name === 'TypeError')) {
-        setError('Cannot connect to the backend server. Please verify that the backend server is running on port 5001.');
+        setError(`Cannot connect to the backend server. Please verify that the backend server is running on ${API_BASE}.`);
       } else {
         setError(err.message || 'An error occurred while uploading the file.');
       }
@@ -273,7 +274,7 @@ function App() {
       ));
 
       try {
-        const response = await fetch('http://192.168.1.166:5001/api/import', {
+        const response = await fetch(`${API_BASE}/api/import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ selectedPOs: [po], importType, skipBlankMaterial }),
@@ -935,6 +936,13 @@ function App() {
               >
                 Financial Entry (FI)
               </button>
+              <button 
+                className={`mode-btn ${importType === 'delivery_note' ? 'active' : ''}`}
+                onClick={() => { setImportType('delivery_note'); setFile(null); setError(null); }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: importType === 'delivery_note' ? 'var(--accent)' : 'transparent', color: importType === 'delivery_note' ? '#fff' : 'var(--text-2)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                Delivery Note
+              </button>
             </div>
             <div className="page-header">
               <h1 className="page-title">
@@ -942,18 +950,20 @@ function App() {
                  (importType === 'purchase' ? 'Upload Purchase Invoice Spreadsheet' : 
                   (importType === 'stock_journal' ? 'Upload Stock Journal Spreadsheet' : 
                    (importType === 'sales_order' ? 'Upload Sales Order Spreadsheet' : 
-                    (importType === 'fi' ? 'Upload Financial Entry (FI) Spreadsheet' : 'Upload GRN Spreadsheet'))))}
+                    (importType === 'fi' ? 'Upload Financial Entry (FI) Spreadsheet' : 
+                     (importType === 'delivery_note' ? 'Upload Delivery Note (WL) Spreadsheet' : 'Upload GRN Spreadsheet')))))}
               </h1>
               <p className="page-desc">
                 {importType === 'po' ? 'Drop your SAP Excel export to start importing purchase orders into Tally.' : 
                  (importType === 'purchase' ? 'Drop your Purchase Invoice Excel export to start importing Purchase Invoices into Tally.' : 
                   (importType === 'stock_journal' ? 'Drop your SAP Excel export to start importing Stock Journal entries (WA and WE ZSTO) into Tally.' : 
                    (importType === 'sales_order' ? 'Drop your SAP Sales Order Excel export to start importing Sales Orders into Tally.' : 
-                    (importType === 'fi' ? 'Drop your FI Data Excel export to start importing Journal entries into Tally.' : 'Drop your SAP GRN Excel export to start importing Receipt Notes into Tally.'))))}
+                    (importType === 'fi' ? 'Drop your FI Data Excel export to start importing Journal entries into Tally.' : 
+                     (importType === 'delivery_note' ? 'Drop your SAP Goods Issue / Delivery Note Excel export (WL Trans./Event Type) to start importing Delivery Notes into Tally.' : 'Drop your SAP GRN Excel export to start importing Receipt Notes into Tally.')))))}
               </p>
               <div style={{ marginTop: '10px' }}>
                 <a
-                  href={`http://192.168.1.166:5001/api/templates/download/${importType}`}
+                  href={`${API_BASE}/api/templates/download/${importType}`}
                   download
                   style={{
                     display: 'inline-flex',

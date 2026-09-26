@@ -654,13 +654,16 @@ function App() {
               const material = String(getV(item, 'Material') || '').split('.')[0].trim();
               const shortText = String(getV(item, 'Material Description') || getV(item, 'Purchase Order - Short Text') || getV(item, 'Short Text') || getV(item, 'Text') || '').trim();
               const qty = importType === 'po' ? getV(item, 'Order Quantity') :
-                          (importType === 'purchase' ? getV(item, 'Quantity') || getV(item, 'Qty in OPUn') : getV(item, 'Qty in Un. of Entry'));
+                          (importType === 'purchase' ? getV(item, 'Quantity') || getV(item, 'Qty in OPUn') : 
+                           (importType === 'sales_invoice' ? getV(item, 'Billed Quantity') || getV(item, 'Quantity') : getV(item, 'Qty in Un. of Entry')));
               const unit = importType === 'po' ? String(getV(item, 'Order Unit') || '').trim() :
                            (importType === 'purchase' ? String(getV(item, 'Order Unit') || getV(item, 'Order Price Unit') || '').trim() :
-                            String(getV(item, 'Unit of Entry') || '').trim());
+                            (importType === 'sales_invoice' ? String(getV(item, 'Sales unit') || getV(item, 'Base Unit of Measure') || '').trim() :
+                             String(getV(item, 'Unit of Entry') || '').trim()));
               let price = importType === 'po' ? getV(item, 'Net Order Price') : '';
               let val = importType === 'po' ? getV(item, 'Net Order Value') :
-                        (importType === 'purchase' ? getV(item, 'Amount') : getV(item, 'Amount in LC'));
+                        (importType === 'purchase' ? getV(item, 'Amount') : 
+                         (importType === 'sales_invoice' ? getV(item, 'Net value') : getV(item, 'Amount in LC')));
               if (importType === 'grn') {
                 const parsedQty = parseFloat(qty) || 0;
                 const parsedVal = parseFloat(val) || 0;
@@ -671,6 +674,12 @@ function App() {
                 const parsedQty = parseFloat(qty) || 0;
                 const parsedVal = parseFloat(val) || 0;
                 price = parsedQty > 0 ? (parsedVal / parsedQty) : 0;
+              } else if (importType === 'sales_invoice') {
+                const parsedQty = parseFloat(qty) || 0;
+                const taxAmt = parseFloat(getV(item, 'Tax amount') || 0) || 0;
+                const parsedVal = parseFloat(val) || 0;
+                const assessable = parsedVal - taxAmt > 0 ? parsedVal - taxAmt : parsedVal;
+                price = parsedQty > 0 ? (assessable / parsedQty) : 0;
               }
               const delInd = String(getV(item, 'Deletion Indicator') || '').trim().toUpperCase();
               const isIgnored = delInd === 'L';
@@ -943,6 +952,13 @@ function App() {
               >
                 Delivery Note
               </button>
+              <button 
+                className={`mode-btn ${importType === 'sales_invoice' ? 'active' : ''}`}
+                onClick={() => { setImportType('sales_invoice'); setFile(null); setError(null); }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: importType === 'sales_invoice' ? 'var(--accent)' : 'transparent', color: importType === 'sales_invoice' ? '#fff' : 'var(--text-2)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                Sales Invoice
+              </button>
             </div>
             <div className="page-header">
               <h1 className="page-title">
@@ -951,7 +967,8 @@ function App() {
                   (importType === 'stock_journal' ? 'Upload Stock Journal Spreadsheet' : 
                    (importType === 'sales_order' ? 'Upload Sales Order Spreadsheet' : 
                     (importType === 'fi' ? 'Upload Financial Entry (FI) Spreadsheet' : 
-                     (importType === 'delivery_note' ? 'Upload Delivery Note (WL) Spreadsheet' : 'Upload GRN Spreadsheet')))))}
+                     (importType === 'delivery_note' ? 'Upload Delivery Note (WL) Spreadsheet' : 
+                      (importType === 'sales_invoice' ? 'Upload Sales Invoice Spreadsheet' : 'Upload GRN Spreadsheet'))))))}
               </h1>
               <p className="page-desc">
                 {importType === 'po' ? 'Drop your SAP Excel export to start importing purchase orders into Tally.' : 
@@ -959,7 +976,8 @@ function App() {
                   (importType === 'stock_journal' ? 'Drop your SAP Excel export to start importing Stock Journal entries (WA and WE ZSTO) into Tally.' : 
                    (importType === 'sales_order' ? 'Drop your SAP Sales Order Excel export to start importing Sales Orders into Tally.' : 
                     (importType === 'fi' ? 'Drop your FI Data Excel export to start importing Journal entries into Tally.' : 
-                     (importType === 'delivery_note' ? 'Drop your SAP Goods Issue / Delivery Note Excel export (WL Trans./Event Type) to start importing Delivery Notes into Tally.' : 'Drop your SAP GRN Excel export to start importing Receipt Notes into Tally.')))))}
+                     (importType === 'delivery_note' ? 'Drop your SAP Goods Issue / Delivery Note Excel export (WL Trans./Event Type) to start importing Delivery Notes into Tally.' : 
+                      (importType === 'sales_invoice' ? 'Drop your SAP Sales Invoice Excel export to start importing Sales Invoices with computed narration into Tally.' : 'Drop your SAP GRN Excel export to start importing Receipt Notes into Tally.'))))))}
               </p>
               <div style={{ marginTop: '10px' }}>
                 <a
@@ -1091,7 +1109,7 @@ function App() {
                         </div>
                         <p className="drop-title">{isDragging ? 'Release to upload' : 'Drag & drop PO Excel'}</p>
                         <p className="drop-sub">or <span className="drop-link">browse file</span></p>
-                        <p className="drop-hint">.xlsx or .xls · {importType === 'po' ? 'SAP PO export format' : (importType === 'purchase' ? 'Purchase Invoice format' : 'SAP GRN export format')}</p>
+                        <p className="drop-hint">.xlsx or .xls · {importType === 'po' ? 'SAP PO export format' : (importType === 'purchase' ? 'Purchase Invoice format' : (importType === 'sales_invoice' ? 'Sales Invoice format' : 'SAP GRN export format'))}</p>
                       </div>
                     )}
                   </div>
@@ -1207,14 +1225,18 @@ function App() {
                    (importType === 'purchase' ? 'Select Purchase Invoices' : 
                     (importType === 'stock_journal' ? 'Select Stock Journal Entries' : 
                      (importType === 'sales_order' ? 'Select Sales Orders' : 
-                      (importType === 'fi' ? 'Select Financial Entries (FI)' : 'Select Goods Receipt Notes (GRN)'))))}
+                      (importType === 'fi' ? 'Select Financial Entries (FI)' : 
+                       (importType === 'delivery_note' ? 'Select Delivery Notes' : 
+                        (importType === 'sales_invoice' ? 'Select Sales Invoices' : 'Select Goods Receipt Notes (GRN)'))))))}
                 </h1>
                 <p className="page-desc">
                   {parsedPOs.length} {importType === 'po' ? 'POs' : 
                                       (importType === 'purchase' ? 'Purchase Invoices' : 
                                        (importType === 'stock_journal' ? 'Stock Journals' : 
                                         (importType === 'sales_order' ? 'Sales Orders' : 
-                                         (importType === 'fi' ? 'FI Entries' : 'GRNs'))))} found · {selectedPos.size} selected
+                                         (importType === 'fi' ? 'FI Entries' : 
+                                          (importType === 'delivery_note' ? 'Delivery Notes' : 
+                                           (importType === 'sales_invoice' ? 'Sales Invoices' : 'GRNs'))))))} found · {selectedPos.size} selected
                   {importType === 'purchase' && ignoredInvoices.length > 0 && ` · ${ignoredInvoices.length} ignored (Missing GRN Tracking)`}
                 </p>
               </div>
@@ -1562,7 +1584,9 @@ function App() {
                       (importType === 'purchase' ? 'Purchase Invoice' : 
                        (importType === 'stock_journal' ? 'Stock Journal' : 
                         (importType === 'sales_order' ? 'Sales Order' : 
-                         (importType === 'fi' ? 'Financial Entry' : 'GRN'))))
+                         (importType === 'fi' ? 'Financial Entry' : 
+                          (importType === 'delivery_note' ? 'Delivery Note' : 
+                           (importType === 'sales_invoice' ? 'Sales Invoice' : 'GRN'))))))
                     }{selectedPos.size !== 1 ? 's' : ''} to Tally
                   </>
                 )}

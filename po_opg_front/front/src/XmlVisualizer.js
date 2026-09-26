@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from './config';
 
 function XmlVisualizer() {
   const [xmlText, setXmlText] = useState('');
@@ -40,7 +41,7 @@ function XmlVisualizer() {
       const formattedFrom = from.replace(/-/g, '');
       const formattedTo = to.replace(/-/g, '');
 
-      const response = await fetch('http://192.168.1.166:5001/api/fetch-from-tally', {
+      const response = await fetch(`${API_BASE}/api/fetch-from-tally`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -69,7 +70,7 @@ function XmlVisualizer() {
 
   const fetchXmlFiles = async () => {
     try {
-      const response = await fetch('http://192.168.1.166:5001/api/xml-files');
+      const response = await fetch(`${API_BASE}/api/xml-files`);
       if (response.ok) {
         const data = await response.json();
         setXmlFiles(data.xmlFiles || []);
@@ -89,7 +90,7 @@ function XmlVisualizer() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`http://192.168.1.166:5001/api/po-xml?file=${encodeURIComponent(fileName)}`);
+      const response = await fetch(`${API_BASE}/api/po-xml?file=${encodeURIComponent(fileName)}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch XML (Status: ${response.status})`);
       }

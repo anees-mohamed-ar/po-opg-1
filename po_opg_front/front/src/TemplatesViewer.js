@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-const API_BASE = 'http://192.168.1.166:5001';
+import { API_BASE } from './config';
 
 export default function TemplatesViewer({ initialModule = 'po' }) {
   const [selectedModule, setSelectedModule] = useState(initialModule);

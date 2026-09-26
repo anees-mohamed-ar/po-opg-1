@@ -235,6 +235,39 @@ const TEMPLATES_CONFIG = {
             { name: 'Reference', required: false, sample: '0080040913', description: 'Outbound Delivery reference number' },
             { name: 'Destination region', required: false, sample: '33', description: 'State code (e.g. 33 for Tamil Nadu)' }
         ]
+    },
+    sales_invoice: {
+        id: 'sales_invoice',
+        title: 'Sales Invoice',
+        sheetName: 'SalesInvoice_Template',
+        originalTotalCols: 122,
+        description: 'Template for Sales Invoices. Imported as Sales vouchers in Tally with automatic CGST+SGST/IGST tax calculation and computed narration fields.',
+        columns: [
+            { name: 'Billing Document', required: true, sample: '90015368', description: 'Unique Billing Document Number (used as Voucher Number in Tally)' },
+            { name: 'Billing Type', required: true, sample: 'ZCOL', description: 'Billing Type (e.g. ZCOL, ZOM) — used for Sales ledger (e.g. Sales ZCOL)' },
+            { name: 'Billing Date', required: true, sample: '01.04.2022', description: 'Billing Date (DD.MM.YYYY or Excel date)' },
+            { name: 'Sales document', required: false, sample: '3745', description: 'Sales document / reference order number' },
+            { name: 'Sold to Party', required: true, sample: '400017', description: 'Customer account code (padded to 10 digits)' },
+            { name: 'Search Term', required: false, sample: 'CHENNAI', description: 'Customer name / search term for party ledger' },
+            { name: 'GST NO', required: false, sample: '33AAECC0681N1ZL', description: 'Customer GSTIN' },
+            { name: 'Destination region', required: true, sample: '33', description: 'State region code: 33 splits Tax Amount into CGST & SGST, otherwise IGST' },
+            { name: 'Material', required: true, sample: 'COAL-I', description: 'Stock item / material code' },
+            { name: 'Description', required: false, sample: 'Coal - Import (MV Flag VI)', description: 'Material description' },
+            { name: 'Plant', required: false, sample: '1310', description: 'Plant / godown code' },
+            { name: 'Batch', required: false, sample: '0000000529', description: 'Batch number' },
+            { name: 'Billed Quantity', required: true, sample: 28.58, description: 'Billed quantity' },
+            { name: 'Sales unit', required: true, sample: 'MT', description: 'Unit of measure (MT, LS, etc.)' },
+            { name: 'Net value', required: true, sample: 265691.11, description: 'Total invoice item amount (Assessable Value = Net value - Tax amount)' },
+            { name: 'Tax amount', required: false, sample: 12575.20, description: 'Tax amount to split or assign as IGST' },
+            { name: 'Profit centre', required: false, sample: '1300', description: 'Profit centre (included in narration if provided)' },
+            { name: 'Volt  -  Draw Voltage', required: false, sample: '110', description: 'Draw voltage (included in narration if provided)' },
+            { name: 'Grp2', required: false, sample: '110', description: 'Group 2 code (included in narration if provided)' },
+            { name: 'Grp2-Desc', required: false, sample: 'grp2 desc', description: 'Group 2 description (included in narration if provided)' },
+            { name: 'Grp3', required: false, sample: 'CH2', description: 'Group 3 code (included in narration if provided)' },
+            { name: 'Grp3  Desc', required: false, sample: 'Chennai EDC North', description: 'Group 3 description (included in narration if provided)' },
+            { name: 'Std Start Date', required: false, sample: '', description: 'Standard start date (included in narration if provided)' },
+            { name: 'Std End Date', required: false, sample: '', description: 'Standard end date (included in narration if provided)' }
+        ]
     }
 };
 

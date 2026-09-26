@@ -212,6 +212,29 @@ const TEMPLATES_CONFIG = {
             { name: 'Unit of Entry', required: true, sample: 'NOS', description: 'Unit of measurement' },
             { name: 'Amount in LC', required: true, sample: 2625.00, description: 'Valuation amount in local currency (INR)' }
         ]
+    },
+    delivery_note: {
+        id: 'delivery_note',
+        title: 'Delivery Note (WL)',
+        sheetName: 'DeliveryNote_Template',
+        originalTotalCols: 30,
+        description: 'Template for Goods Issue / Delivery Notes (WL Trans./Event Type). Imported as Delivery Note vouchers in Tally.',
+        columns: [
+            { name: 'Trans./Event Type', required: true, sample: 'WL', description: "Must be 'WL' for delivery note entries" },
+            { name: 'Material Document', required: true, sample: '4900630047', description: 'Delivery Note Material Document Number — used as Voucher Number in Tally' },
+            { name: 'Document Date', required: false, sample: '01.04.2021', description: 'Document date (DD.MM.YYYY)' },
+            { name: 'Posting Date', required: true, sample: '01.04.2021', description: 'Posting date of the delivery note' },
+            { name: 'Customer', required: true, sample: '379', description: 'Customer account code — used as Party Ledger (padded to 10 digits)' },
+            { name: 'Goods recipient', required: false, sample: '0000000379', description: 'Goods recipient customer code' },
+            { name: 'Material', required: true, sample: 'FLYASH', description: 'Material / stock item code' },
+            { name: 'Material Desc', required: false, sample: 'FLYASH', description: 'Material description' },
+            { name: 'Plant', required: true, sample: '1000', description: 'Issuing plant / godown code in Tally' },
+            { name: 'Qty in Un. of Entry', required: true, sample: 22.21, description: 'Billed / delivered quantity' },
+            { name: 'Unit of Entry', required: true, sample: 'MT', description: 'Unit of measure (e.g. MT, NOS)' },
+            { name: 'Amount in LC', required: true, sample: 2221.00, description: 'Total item amount in local currency (INR)' },
+            { name: 'Reference', required: false, sample: '0080040913', description: 'Outbound Delivery reference number' },
+            { name: 'Destination region', required: false, sample: '33', description: 'State code (e.g. 33 for Tamil Nadu)' }
+        ]
     }
 };
 
